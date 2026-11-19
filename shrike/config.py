@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from .errors import ConfigError
 
-DEFAULT_CONFIG = "/etc/search-kestrel/config.toml"
+DEFAULT_CONFIG = "/etc/shrike/config.toml"
 
 
 @dataclass(frozen=True)
@@ -78,7 +78,7 @@ def _get(d, key, typ, default=None, required=False, where=""):
 
 
 def load_config(path=None):
-    path = path or os.environ.get("SK_CONFIG") or DEFAULT_CONFIG
+    path = path or os.environ.get("SHRIKE_CONFIG") or DEFAULT_CONFIG
     try:
         with open(path, "rb") as f:
             raw = tomllib.load(f)
@@ -135,7 +135,7 @@ def load_config(path=None):
     return Config(
         phase=phase,
         timezone=tz,
-        data_dir=_get(g, "data_dir", str, "/var/lib/search-kestrel", where="general."),
+        data_dir=_get(g, "data_dir", str, "/var/lib/shrike", where="general."),
         dead_man_url=_get(g, "dead_man_url", str, "", where="general."),
         sites=tuple(sites),
         nightly=_get(sch, "nightly", str, "03:30", where="schedule."),
@@ -151,7 +151,7 @@ def load_config(path=None):
         trello_alert_list_id=_get(t, "alert_list_id", str, "", where="trello."),
         backup_target=target,
         gdrive_folder_id=_get(b, "gdrive_folder_id", str, "", where="backup."),
-        local_path=_get(b, "local_path", str, "/var/lib/search-kestrel/backups", where="backup."),
+        local_path=_get(b, "local_path", str, "/var/lib/shrike/backups", where="backup."),
         keep_daily=_get(b, "keep_daily", int, 30, where="backup."),
         keep_monthly=_get(b, "keep_monthly", int, 12, where="backup."),
         monthly_cap_usd=_get(p3, "monthly_cap_usd", float, 0.0, where="phase3."),
@@ -192,28 +192,28 @@ NEEDS = {
 def load_secrets(entry="jobs", env=None):
     env = os.environ if env is None else env
     need = NEEDS[entry]
-    env_file = env.get("SK_ENV_FILE", "")
+    env_file = env.get("SHRIKE_ENV_FILE", "")
     if env_file and need:
         _check_private(env_file, "env file")
     sec = Secrets(
-        service_account_file=env.get("SK_SERVICE_ACCOUNT_FILE", ""),
-        trello_key=env.get("SK_TRELLO_KEY", ""),
-        trello_token=env.get("SK_TRELLO_TOKEN", ""),
-        api_key=env.get("SK_API_KEY", ""),
-        mcp_secret=env.get("SK_MCP_SECRET", ""),
+        service_account_file=env.get("SHRIKE_SERVICE_ACCOUNT_FILE", ""),
+        trello_key=env.get("SHRIKE_TRELLO_KEY", ""),
+        trello_token=env.get("SHRIKE_TRELLO_TOKEN", ""),
+        api_key=env.get("SHRIKE_API_KEY", ""),
+        mcp_secret=env.get("SHRIKE_MCP_SECRET", ""),
         env_file=env_file,
     )
     if "service_account" in need:
         if not sec.service_account_file:
-            raise ConfigError("SK_SERVICE_ACCOUNT_FILE is not set", "set it in /etc/search-kestrel/env")
+            raise ConfigError("SHRIKE_SERVICE_ACCOUNT_FILE is not set", "set it in /etc/shrike/env")
         _check_private(sec.service_account_file, "service-account key file")
     if "trello" in need and not (sec.trello_key and sec.trello_token):
         raise ConfigError(
-            "SK_TRELLO_KEY and SK_TRELLO_TOKEN are required (Phase 0 alerts are Trello cards)",
-            "set both in /etc/search-kestrel/env",
+            "SHRIKE_TRELLO_KEY and SHRIKE_TRELLO_TOKEN are required (Phase 0 alerts are Trello cards)",
+            "set both in /etc/shrike/env",
         )
     if "api_key" in need and len(sec.api_key) < 24:
-        raise ConfigError("SK_API_KEY must be at least 24 characters", "generate one: openssl rand -hex 24")
+        raise ConfigError("SHRIKE_API_KEY must be at least 24 characters", "generate one: openssl rand -hex 24")
     if entry == "server" and sec.mcp_secret and len(sec.mcp_secret) < 24:
-        raise ConfigError("SK_MCP_SECRET must be at least 24 characters when set", "generate one: openssl rand -hex 24")
+        raise ConfigError("SHRIKE_MCP_SECRET must be at least 24 characters when set", "generate one: openssl rand -hex 24")
     return sec

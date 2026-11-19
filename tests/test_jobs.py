@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest import mock
 
-from sk import backup, gsc, health, jobs
+from shrike import backup, gsc, health, jobs
 from tests.fakes import FakeSearchConsole, FakeTrello, make_ctx, make_data, tmpdir
 
 P = "sc-domain:ex.com"
@@ -131,7 +131,7 @@ class JobsTest(unittest.TestCase):
         jobs.take_lock(self.ctx.cfg.data_dir).close()
 
     def test_main_exit3_pings_for_nightly(self):
-        os.environ["SK_CONFIG"] = self.ctx.cfg.path
+        os.environ["SHRIKE_CONFIG"] = self.ctx.cfg.path
         lock = jobs.take_lock(self.ctx.cfg.data_dir)
         try:
             with mock.patch.object(jobs, "load_secrets"), mock.patch.object(health, "ping_dead_man") as ping:
@@ -141,40 +141,40 @@ class JobsTest(unittest.TestCase):
                 self.assertEqual(ping.call_count, 1)
         finally:
             lock.close()
-            del os.environ["SK_CONFIG"]
+            del os.environ["SHRIKE_CONFIG"]
 
     def test_weekly_refused_in_phase0(self):
-        os.environ["SK_CONFIG"] = self.ctx.cfg.path
+        os.environ["SHRIKE_CONFIG"] = self.ctx.cfg.path
         try:
             with mock.patch.object(jobs, "load_secrets"):
                 self.assertEqual(jobs.main(["weekly"]), jobs.EXIT_CONFIG)
         finally:
-            del os.environ["SK_CONFIG"]
+            del os.environ["SHRIKE_CONFIG"]
 
     def test_crash_exit_code_is_not_treated_as_success(self):
-        """A traceback must not exit with a code in SuccessExitStatus=10 3, or sk-alert@ never fires."""
+        """A traceback must not exit with a code in SuccessExitStatus=10 3, or shrike-alert@ never fires."""
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        code = ("import sys; from unittest import mock; from sk import jobs\n"
+        code = ("import sys; from unittest import mock; from shrike import jobs\n"
                 "with mock.patch.object(jobs, 'load_secrets'), "
                 "mock.patch.object(jobs, '_make_ctx', side_effect=RuntimeError('boom')):\n"
                 "    sys.exit(jobs.main(['backfill']))\n")
-        env = dict(os.environ, SK_CONFIG=self.ctx.cfg.path, PYTHONPATH=root)
+        env = dict(os.environ, SHRIKE_CONFIG=self.ctx.cfg.path, PYTHONPATH=root)
         r = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, cwd=root)
         self.assertNotIn(r.returncode, (0, 3, 10))
         self.assertIn(b"RuntimeError", r.stderr)
-        with open(os.path.join(root, "deploy", "systemd", "sk-backfill.service")) as f:
+        with open(os.path.join(root, "deploy", "systemd", "shrike-backfill.service")) as f:
             self.assertIn("SuccessExitStatus=10 3", f.read())
 
     def test_render_units(self):
         out = jobs.render_units(self.ctx.cfg, self.t)
-        self.assertEqual([os.path.basename(p) for p in out], ["sk-nightly.timer"])
+        self.assertEqual([os.path.basename(p) for p in out], ["shrike-nightly.timer"])
         with open(out[0]) as f:
             text = f.read()
         self.assertIn("OnCalendar=*-*-* 03:30:00 UTC", text)
         self.assertIn("WantedBy=timers.target", text)
         p1 = make_ctx(tmpdir(), phase=1)
         out = jobs.render_units(p1.cfg, self.t)
-        with open([p for p in out if p.endswith("sk-weekly.timer")][0]) as f:
+        with open([p for p in out if p.endswith("shrike-weekly.timer")][0]) as f:
             self.assertIn("OnCalendar=Mon *-*-* 07:00:00 UTC", f.read())
 
 

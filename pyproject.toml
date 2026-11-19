@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "search-kestrel"
+name = "shrike"
 version = "0.1.0"
 description = "Free, self-hosted Search Console history, opportunities and weekly fix briefs."
 readme = "README.md"
@@ -16,13 +16,13 @@ dependencies = [
 ]
 
 [project.scripts]
-sk-jobs = "sk.jobs:main"
+shrike = "shrike.jobs:main"
 
 [tool.setuptools]
-packages = ["sk", "sk.migrations"]
+packages = ["shrike", "shrike.migrations"]
 
 [tool.setuptools.package-data]
-"sk.migrations" = ["*.sql"]
+"shrike.migrations" = ["*.sql"]
 
 [tool.ruff]
 line-length = 135

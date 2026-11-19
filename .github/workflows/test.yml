@@ -12,6 +12,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: ruff check sk tests
+      - run: ruff check shrike tests
       - run: coverage run -m unittest discover -s tests -t .
-      - run: coverage report --fail-under=85 --include=sk/gsc.py,sk/coverage.py,sk/backup.py,sk/db.py,sk/health.py
+      - run: coverage report --fail-under=85 --include=shrike/gsc.py,shrike/coverage.py,shrike/backup.py,shrike/db.py,shrike/health.py

@@ -11,11 +11,11 @@ import tempfile
 from . import db
 from .errors import AuthError, SkError, UpstreamError
 
-NAME_RE = re.compile(r"^sk-(\d{8}T\d{4}Z)\.sqlite\.gz$")
+NAME_RE = re.compile(r"^shrike-(\d{8}T\d{4}Z)\.sqlite\.gz$")
 
 
 def backup_name(now):
-    return f"sk-{now.strftime('%Y%m%dT%H%MZ')}.sqlite.gz"
+    return f"shrike-{now.strftime('%Y%m%dT%H%MZ')}.sqlite.gz"
 
 
 def parse_time(name):
@@ -92,7 +92,7 @@ class DriveTarget:
 
     def list(self):
         drive_id = self.drive_id()
-        q = f"'{self.folder_id}' in parents and trashed = false and name contains 'sk-'"
+        q = f"'{self.folder_id}' in parents and trashed = false and name contains 'shrike-'"
         out, token = [], None
         while True:
             kw = dict(q=q, includeItemsFromAllDrives=True, supportsAllDrives=True,
@@ -251,7 +251,7 @@ def test_target(target):
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".gz")
     tmp.write(b"\0")
     tmp.close()
-    name = "sk-19700101T0000Z.sqlite.gz"
+    name = "shrike-19700101T0000Z.sqlite.gz"
     try:
         if target.kind == "local":
             target.upload(tmp.name, name)

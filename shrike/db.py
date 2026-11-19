@@ -32,7 +32,7 @@ def connect_ro(path):
 
 
 def _migrations():
-    files = resources.files("sk.migrations")
+    files = resources.files("shrike.migrations")
     out = []
     for f in files.iterdir():
         m = re.match(r"^(\d{3})_.*\.sql$", f.name)

@@ -1,4 +1,4 @@
-# Search Kestrel (working name): free, self-hosted SEO, GEO and AEO tool
+# Shrike: free, self-hosted SEO, GEO and AEO tool
 
 *   **Author:** Harshil Rekhi
 *   **Status:** Reviewed (EGM Stages 5-9, 2026-11-19). The round-2 fixes are applied but weren't re-audited. Phase 0 is blocked on Q3.
@@ -10,7 +10,7 @@ SEO is search engine optimization. GEO (generative engine optimization) and AEO 
 
 ## Overview
 
-Search Kestrel is a self-hosted tool. It reads search data for the author's two sites, solodac and evogr, and turns it into a short weekly list of fixes.
+Shrike is a self-hosted tool. It reads search data for the author's two sites, solodac and evogr, and turns it into a short weekly list of fixes.
 
 It follows the shape of Kestrel, the author's free vidIQ replacement for YouTube and Instagram (public repo `evogr1/kestrel`):
 
@@ -99,7 +99,7 @@ Everything beyond Search Console is added in Phases 2 and 3, gated as shown in t
 
 ## Open Questions
 
-*   **Q1. Tool name.** "Search Kestrel" is a working name.
+*   **Q1. Resolved: tool name.** Shrike (chosen 2026-11-19).
 *   **Q2. Resolved: language and stack.** Python 3.11 with pinned libraries. See the Technical Plan, and Alternatives G and H.
 *   **Q3. Service-account access.**
     *   Can a Google service account be added as a user on both sites' Search Console properties, whether they're domain or URL-prefix properties?
@@ -177,22 +177,22 @@ The HTTP server and MCP layers copy Kestrel's pattern:
 
 It runs on one Linux VM. The author's own host is Open Question Q9.
 
-The names in the diagram (`sk_gsc`, `sk_opps` and so on) are logical components. Each one is a module in the `sk/` package (`sk/gsc.py`, `sk/opps.py`, ...).
+The names in the diagram (`shrike_gsc`, `shrike_opps` and so on) are logical components. Each one is a module in the `shrike/` package (`shrike/gsc.py`, `shrike/opps.py`, ...).
 
 ```text
                  systemd timers
         nightly 03:30 ─┐      ┌─ weekly Mon 07:00
                        v      v
-  Google Search ──> sk_gsc ──> SQLite (final rows append-only) ──> sk_opps ──> sk_brief ──> Trello
+  Google Search ──> shrike_gsc ──> SQLite (final rows append-only) ──> shrike_opps ──> shrike_brief ──> Trello
   Console API         │            │      ^                                       ^          │
   (service acct)      │            │      │                                       │          │
-                      │            │      └──── sk_fixes <──── card status ───────┴──────────┘
+                      │            │      └──── shrike_fixes <──── card status ───────┴──────────┘
                       │            v
-                      │       sk_backup ──> Google Shared Drive (or other off-host target)
+                      │       shrike_backup ──> Google Shared Drive (or other off-host target)
                       v
-                  sk_health ──> Trello "alert" card ; dead-man ping ──> email if pings stop
+                  shrike_health ──> Trello "alert" card ; dead-man ping ──> email if pings stop
 
-  Claude ──local MCP (stdio)──HTTP──> sk_server (/v1/... and /mcp/<secret>) ──> SQLite (read only)
+  Claude ──local MCP (stdio)──HTTP──> shrike_server (/v1/... and /mcp/<secret>) ──> SQLite (read only)
   claude.ai ──Cloudflare Tunnel──> /mcp/<secret> only
 ```
 
@@ -207,7 +207,7 @@ The names in the diagram (`sk_gsc`, `sk_opps` and so on) are logical components.
     *   the backup target,
     *   the dead-man URL,
     *   the Phase 3 cost cap.
-*   **Secrets never go in the repo or in `config.toml`.** They live in an env file (`/etc/search-kestrel/env`) and in the key file it points to (paths and modes in C1):
+*   **Secrets never go in the repo or in `config.toml`.** They live in an env file (`/etc/shrike/env`) and in the key file it points to (paths and modes in C1):
     *   the service-account key file path,
     *   the Trello key and token,
     *   the API key for `/v1/*`,
@@ -249,17 +249,17 @@ Every job that writes (`backfill`, `nightly`, `weekly` and `setup`) takes one sh
 
 Only job processes write to SQLite, which runs in WAL mode. The HTTP server opens it read-only.
 
-**Backfill** (`sk-jobs backfill`): for each site, sets `site_range` (C2), then walks forward day by day from the oldest date Search Console still has to the newest final date. That way, the days about to expire are saved first.
+**Backfill** (`shrike backfill`): for each site, sets `site_range` (C2), then walks forward day by day from the oldest date Search Console still has to the newest final date. That way, the days about to expire are saved first.
 
 *   Each day is three pulls: site totals, pages, and page plus query.
-*   Each pull pages through all result rows (see `sk/gsc.py`).
+*   Each pull pages through all result rows (see `shrike/gsc.py`).
 *   If the API's daily row cap for a property cuts a day off, the day is marked `truncated`, and an alert is raised once.
 *   It skips any date and dimension set `v_coverage` already marks as final or truncated, so a stopped backfill resumes where it left off.
 *   When a site's coverage first reaches the newest final date with no gaps, it writes that site's `initial` row in `baselines`.
 *   It stays under Search Console's per-site rate limit by pausing between calls and backing off on HTTP 429.
 *   If coverage is still incomplete when the oldest missing date is within 14 days of expiring, it raises an alert.
 
-**Nightly** (`sk-jobs nightly`, 03:30 local time): each step runs on its own. A failure in one step is recorded and alerted, and the remaining steps still run.
+**Nightly** (`shrike nightly`, 03:30 local time): each step runs on its own. A failure in one step is recorded and alerted, and the remaining steps still run.
 
 1.  Refresh `site_range` (C2), then pull every date, up to the newest final date, that lacks a successful final pull for any of the three dimension sets. This covers the newly final days and any gaps.
 2.  Back up:
@@ -272,7 +272,7 @@ Only job processes write to SQLite, which runs in WAL mode. The HTTP server open
 4.  Run the health checks.
 5.  Ping the dead-man URL, if the job reached this step and no alert in this run went undelivered. A failed step that was alerted through Trello doesn't stop the ping, since the alert card is the notice. A broken Trello, a dead VM or a run that never started all stop it.
 
-**Weekly** (`sk-jobs weekly`, Monday 07:00 local time):
+**Weekly** (`shrike weekly`, Monday 07:00 local time):
 
 1.  Run the opportunity rules on the last 28 final days.
 2.  Measure any fixes that now have 28 final days after their ship date.
@@ -284,11 +284,11 @@ Only job processes write to SQLite, which runs in WAL mode. The HTTP server open
 
     If any of these fail, raise an alert.
 
-**Setup** (`sk-jobs setup`): runs the full setup check, including the checks that write to Trello and Drive. It saves the report to `<data_dir>/setup_report.json`.
+**Setup** (`shrike setup`): runs the full setup check, including the checks that write to Trello and Drive. It saves the report to `<data_dir>/setup_report.json`.
 
-**Alert** (`sk-jobs alert --unit NAME`, started by systemd when a job process crashes; optional, since the dead-man check also catches crashes): posts an alert card naming the failed systemd unit, with the fix step "run `journalctl -u NAME` and see docs/OPERATIONS.md".
+**Alert** (`shrike alert --unit NAME`, started by systemd when a job process crashes; optional, since the dead-man check also catches crashes): posts an alert card naming the failed systemd unit, with the fix step "run `journalctl -u NAME` and see docs/OPERATIONS.md".
 
-### Opportunity rules (`sk_opps`)
+### Opportunity rules (`shrike_opps`)
 
 All thresholds live in `config.toml`. Definitions used by the rules:
 
@@ -314,7 +314,7 @@ The rules and their defaults:
 
 Each brief takes at most `max_per_type` (default 4) of each type, so one type can't fill the brief. The top 5 to 10 by score are sent.
 
-### The brief (`sk_brief`)
+### The brief (`shrike_brief`)
 
 Each weekly run posts:
 
@@ -327,7 +327,7 @@ Each weekly run posts:
 
 The card ID is stored, so the nightly job can track the card's status.
 
-### Fix measurement (`sk_fixes`)
+### Fix measurement (`shrike_fixes`)
 
 For each fix, the tool compares the page's clicks and impressions in the 28 final days after the ship date with the 28 final days before.
 
@@ -349,7 +349,7 @@ A result is measured and reported but left out of the running total when:
 
 The **running total** is the sum of included effects, in extra clicks per 28 days.
 
-### Health and alerts (`sk_health`)
+### Health and alerts (`shrike_health`)
 
 Every job step writes a `runs` record. These raise a Trello card in the alert list:
 
@@ -369,9 +369,9 @@ Each alert names the failure and the one step that fixes it. `events` stops repe
 *   The nightly job pings it only if the run reached its last step and no alert went undelivered. A Trello failure therefore also stops the pings.
 *   A nightly run skipped because another writer holds the lock (exit 3) still pings. Every writer unit has a `TimeoutStartSec=` limit, so a hung writer is killed, fires `OnFailure` and releases the lock. It can't keep the pings going indefinitely (C14).
 *   The service on the other end, for example a free healthchecks.io check with a 26-hour window, emails the self-hoster when pings stop.
-*   `sk-jobs setup` warns if no dead-man URL is set. It also tests the alert path end to end, by posting a test card and deleting it.
+*   `shrike setup` warns if no dead-man URL is set. It also tests the alert path end to end, by posting a test card and deleting it.
 
-### HTTP API and MCP (`sk_server`, `sk_mcp`, `sk_remote_mcp`)
+### HTTP API and MCP (`shrike_server`, `shrike_mcp`, `shrike_remote_mcp`)
 
 The server listens on `127.0.0.1:8899` by default.
 
@@ -382,15 +382,15 @@ The server listens on `127.0.0.1:8899` by default.
 
 | Route | What it returns |
 |---|---|
-| `GET /v1/setup` | The last report saved by `sk-jobs setup`, plus read-only checks run on each call (config, file permissions, the dead-man URL, and the last runs). Each broken part comes with one fix step. The route never writes to Trello, Drive or SQLite. Same role as Kestrel's `kestrel_setup` (see `evogr1/kestrel`, `scout_mcp.py`, since 1.4.1). |
+| `GET /v1/setup` | The last report saved by `shrike setup`, plus read-only checks run on each call (config, file permissions, the dead-man URL, and the last runs). Each broken part comes with one fix step. The route never writes to Trello, Drive or SQLite. Same role as Kestrel's `kestrel_setup` (see `evogr1/kestrel`, `scout_mcp.py`, since 1.4.1). |
 | `GET /v1/sites` | The configured sites, with coverage ranges and each site's last 28 days compared with its frozen baseline. |
 | `GET /v1/performance` | Clicks, impressions, CTR and position for a site, page or query, with any date range or comparison. Paged with `limit` (default 50, max 1,000) and `offset`. Dates are Search Console dates, in US Pacific time. |
 | `GET /v1/opportunities` | Current opportunities, filtered by site and type. |
 | `GET /v1/fixes` | Fixes with their measurement status and results, plus the running total. |
 | `GET /v1/health` | Recent runs, gaps, backup age and open alerts. |
-| `POST /v1/jobs` (param `job`: `nightly`, `weekly` or `backfill`) | Runs `systemctl start --no-block sk-<job>.service`, through a narrow polkit rule, and returns 202 with the unit name. If a writer unit is already running (`ActiveState` is `activating`, `active` or `deactivating`), it returns 409 "already running". The job runs in its own unit, with its own sandbox, journal and `OnFailure` alert. Its progress shows in `GET /v1/health`. |
+| `POST /v1/jobs` (param `job`: `nightly`, `weekly` or `backfill`) | Runs `systemctl start --no-block shrike-<job>.service`, through a narrow polkit rule, and returns 202 with the unit name. If a writer unit is already running (`ActiveState` is `activating`, `active` or `deactivating`), it returns 409 "already running". The job runs in its own unit, with its own sandbox, journal and `OnFailure` alert. Its progress shows in `GET /v1/health`. |
 
-The MCP tool names map one to one onto these routes (`sk_setup`, `sk_sites`, `sk_performance`, `sk_opportunities`, `sk_fixes`, `sk_health` and `sk_run_job`). The local stdio connector serves all seven. The remote endpoint serves the same tools except `sk_run_job`.
+The MCP tool names map one to one onto these routes (`shrike_setup`, `shrike_sites`, `shrike_performance`, `shrike_opportunities`, `shrike_fixes`, `shrike_health` and `shrike_run_job`). The local stdio connector serves all seven. The remote endpoint serves the same tools except `shrike_run_job`.
 
 **Remote access:**
 
@@ -399,7 +399,7 @@ The MCP tool names map one to one onto these routes (`sk_setup`, `sk_sites`, `sk
 *   The secret is part of the URL, so Cloudflare's edge can see it. That's accepted, the same as for Kestrel.
 *   Proxied DNS into Caddy or nginx is the documented alternative (Q9).
 
-### Backups (`sk_backup`)
+### Backups (`shrike_backup`)
 
 The default target is a Google Shared Drive folder. The service account is a member of the folder with the Content Manager role.
 
@@ -412,16 +412,16 @@ Self-hosters without Google Workspace set `backup.target = "local"` and a path, 
 ### Later phases (shape only, detailed in their own plan revisions)
 
 *   **Phase 2:**
-    *   `sk_audit`: an on-demand single-URL audit using the free PageSpeed Insights API plus an HTML fetch. It checks:
+    *   `shrike_audit`: an on-demand single-URL audit using the free PageSpeed Insights API plus an HTML fetch. It checks:
         *   the title, meta, headings, schema, canonical tag and internal links,
         *   whether robots.txt allows the crawlers that power AI search (OAI-SearchBot, PerplexityBot, Googlebot and Bingbot).
 
         Training-only bots are reported separately.
-    *   `sk_bing`: the Bing Webmaster API, stored in the same final-rows pattern.
+    *   `shrike_bing`: the Bing Webmaster API, stored in the same final-rows pattern.
     *   IndexNow submission, only if Q7 finds that nothing already sends it.
     *   Competitor sitemap and title diffs.
 *   **Phase 3:**
-    *   `sk_ai`: imports the Bing AI Performance CSV from a watched folder.
+    *   `shrike_ai`: imports the Bing AI Performance CSV from a watched folder.
     *   Gemini grounding, if Q5 allows storing its results.
     *   Perplexity and OpenAI, off by default. Each paid call first reserves its maximum cost in a `ledger` table, and is refused if that would pass the monthly cap. Retries count against the cap.
     *   Prompts are versioned and each runs at least 3 times per engine. Raw answers are stored, and every figure is labeled a proxy.
@@ -543,7 +543,7 @@ Self-hosters without Google Workspace set `backup.target = "local"` and a path, 
     *   Exact runtimes are measured in Phase 0 and depend on Q4.
     *   Database size follows the size check in the Data model section.
 *   **Rollout & Rollback**:
-    *   On upgrade, the first job to run (`sk-jobs setup`, by `install.sh`) takes an explicit snapshot before running any migration. Each migration runs inside a transaction. The server never migrates; it refuses to serve data routes until the schema is current.
+    *   On upgrade, the first job to run (`shrike setup`, by `install.sh`) takes an explicit snapshot before running any migration. Each migration runs inside a transaction. The server never migrates; it refuses to serve data routes until the schema is current.
     *   Rolling back means restoring that snapshot and running the previous release.
     *   Final raw rows are append-only by rule: no code path updates or deletes them, and migrations may only add. A bad release can still corrupt derived data.
     *   Opportunity scores are recomputed from raw rows by every weekly run. Fix records, opportunity statuses and card links can't be rebuilt; they come back only from a backup.
@@ -574,7 +574,7 @@ Self-hosters without Google Workspace set `backup.target = "local"` and a path, 
 
 This plan covers **Phase 0 and Phase 1** in full. Files tagged **[P0]** are needed to start capturing data, and ship first. Files tagged **[P1]** complete the core. Phases 2 and 3 each get their own revision of this section before they're built. They depend on open questions (Q5 to Q8) and on whether Phase 1 meets G2 and G3.
 
-The repo is `search-kestrel/`. Renaming it when Q1 is settled touches every path, unit name, polkit rule and doc that contains `search-kestrel` (see C1). The Python package `sk/` keeps its name. It targets Python 3.11 or later. Tests use the standard `unittest` module. Where code is copied from Kestrel, a comment at the top of the file names the Kestrel file and commit it came from (Alternative F).
+The repo and Python package are both `shrike`. It targets Python 3.11 or later. Tests use the standard `unittest` module. Where code is copied from Kestrel, a comment at the top of the file names the Kestrel file and commit it came from (Alternative F).
 
 ### Contracts
 
@@ -584,32 +584,32 @@ This section fixes the schema, interfaces and edge rules that the file list belo
 
 | Item | Value |
 |---|---|
-| Code checkout | `/opt/search-kestrel` (git clone of the repo) |
-| Virtualenv | `/opt/search-kestrel/venv`, with the package installed via `pip install /opt/search-kestrel` (non-editable) |
-| Config directory | `/etc/search-kestrel/`, owner `root:sk`, mode 750 |
-| Config | `/etc/search-kestrel/config.toml`, owner `root:sk`, mode 640. `SK_CONFIG` overrides the path. |
-| Env file | `/etc/search-kestrel/env`, owner `root:root`, mode 600. systemd reads it through `EnvironmentFile=`. Each unit also sets `Environment=SK_ENV_FILE=/etc/search-kestrel/env`, so the code can check the file's mode. |
-| Service-account key | `/etc/search-kestrel/sa.json`, owner `sk:sk`, mode 600. `SK_SERVICE_ACCOUNT_FILE` points to it. |
-| Data directory | `/var/lib/search-kestrel` (`StateDirectory=search-kestrel` with `StateDirectoryMode=0700`, owner `sk`). `install.sh` also creates it, as `sk:sk` mode 700, so it exists before any unit runs. It holds `data.sqlite`, `writer.lock`, `setup_report.json`, `tmp/` and, in local backup mode, the default `backups/`. |
-| Migrations | `sk/migrations/NNN_*.sql`, shipped inside the package and read with `importlib.resources` |
+| Code checkout | `/opt/shrike` (git clone of the repo) |
+| Virtualenv | `/opt/shrike/venv`, with the package installed via `pip install /opt/shrike` (non-editable) |
+| Config directory | `/etc/shrike/`, owner `root:shrike`, mode 750 |
+| Config | `/etc/shrike/config.toml`, owner `root:shrike`, mode 640. `SHRIKE_CONFIG` overrides the path. |
+| Env file | `/etc/shrike/env`, owner `root:root`, mode 600. systemd reads it through `EnvironmentFile=`. Each unit also sets `Environment=SHRIKE_ENV_FILE=/etc/shrike/env`, so the code can check the file's mode. |
+| Service-account key | `/etc/shrike/sa.json`, owner `shrike:shrike`, mode 600. `SHRIKE_SERVICE_ACCOUNT_FILE` points to it. |
+| Data directory | `/var/lib/shrike` (`StateDirectory=shrike` with `StateDirectoryMode=0700`, owner `shrike`). `install.sh` also creates it, as `shrike:shrike` mode 700, so it exists before any unit runs. It holds `data.sqlite`, `writer.lock`, `setup_report.json`, `tmp/` and, in local backup mode, the default `backups/`. |
+| Migrations | `shrike/migrations/NNN_*.sql`, shipped inside the package and read with `importlib.resources` |
 
 Which entry point needs which secret:
 
 | Entry point | Requires |
 |---|---|
-| `sk-jobs` (all subcommands except `alert` and `render-units`) | `SK_SERVICE_ACCOUNT_FILE`. `SK_TRELLO_KEY` and `SK_TRELLO_TOKEN`, which are required in every phase, because Phase 0 alerts are Trello cards (G5). |
-| `sk-jobs render-units` | none (it reads only `config.toml`) |
-| `sk-jobs alert` | `SK_TRELLO_KEY` and `SK_TRELLO_TOKEN` |
-| `sk-server` | `SK_API_KEY`, at least 24 characters, as in Kestrel. `SK_MCP_SECRET` is optional: when it's empty, `/mcp/` returns 404. When set, it must be at least 24 characters. |
-| `sk-mcp` (stdio) | `SK_URL` (default `http://127.0.0.1:8899`) and `SK_API_KEY` |
+| `shrike` (all subcommands except `alert` and `render-units`) | `SHRIKE_SERVICE_ACCOUNT_FILE`. `SHRIKE_TRELLO_KEY` and `SHRIKE_TRELLO_TOKEN`, which are required in every phase, because Phase 0 alerts are Trello cards (G5). |
+| `shrike render-units` | none (it reads only `config.toml`) |
+| `shrike alert` | `SHRIKE_TRELLO_KEY` and `SHRIKE_TRELLO_TOKEN` |
+| `shrike-server` | `SHRIKE_API_KEY`, at least 24 characters, as in Kestrel. `SHRIKE_MCP_SECRET` is optional: when it's empty, `/mcp/` returns 404. When set, it must be at least 24 characters. |
+| `shrike-mcp` (stdio) | `SHRIKE_URL` (default `http://127.0.0.1:8899`) and `SHRIKE_API_KEY` |
 
-`load_secrets(entry)` checks only what its entry point needs. It checks that the files named by `SK_ENV_FILE` (when set) and `SK_SERVICE_ACCOUNT_FILE` have no group or other permission bits.
+`load_secrets(entry)` checks only what its entry point needs. It checks that the files named by `SHRIKE_ENV_FILE` (when set) and `SHRIKE_SERVICE_ACCOUNT_FILE` have no group or other permission bits.
 
-`sk-mcp` runs on the author's laptop, reaching the VM through an SSH port forward: `ssh -N -L 8899:127.0.0.1:8899 vm`. `SK_URL` and `SK_API_KEY` are set in the laptop's MCP client config. This is the only supported way to use the local MCP.
+`shrike-mcp` runs on the author's laptop, reaching the VM through an SSH port forward: `ssh -N -L 8899:127.0.0.1:8899 vm`. `SHRIKE_URL` and `SHRIKE_API_KEY` are set in the laptop's MCP client config. This is the only supported way to use the local MCP.
 
 The server uses port 8899, so it doesn't clash with Kestrel's 8799 on a shared VM.
 
-#### C2. Schema (`sk/migrations/001_init.sql`)
+#### C2. Schema (`shrike/migrations/001_init.sql`)
 
 All dates are `TEXT 'YYYY-MM-DD'`, in Search Console dates (US Pacific). All timestamps are `TEXT`, in ISO 8601 UTC.
 
@@ -653,7 +653,7 @@ Triggers abort `UPDATE` and `DELETE` on the three `gsc_*` tables. Application co
 | `Problem` | `kind`, `subject`, `message`, `fix_step`, `once: bool` |
 | `Brief` | `header: list[str]`, `comparisons: list[Comparison]`, `opportunities: list[Opportunity]`, `measured: list[Result]`, `running_total: float`, `note: str` |
 
-#### C4. Pull rules (`sk/gsc.py`)
+#### C4. Pull rules (`shrike/gsc.py`)
 
 *   **Retention window.** `oldest = newest_final - 482 days`. Google keeps about 16 months, about 486 days. The 4-day margin stops the backfill from requesting a date that expires while the run is still going. The plain day arithmetic avoids month math, which the standard library doesn't provide.
 *   **Pacing.** There's a pause of `pull_pause_seconds` (default 0.5) between API calls. Retries are as described in item 14.
@@ -661,7 +661,7 @@ Triggers abort `UPDATE` and `DELETE` on the three `gsc_*` tables. Application co
 *   **Error classification.** For 403 responses, the code reads `error.errors[0].reason`. The reasons `rateLimitExceeded`, `userRateLimitExceeded`, `quotaExceeded` and `dailyLimitExceeded` are retried like 429, and then raise `QuotaError`. Any other 401 or 403 raises `AuthError`, with an API-specific fix step: for Search Console, "add <sa email> as a Restricted user on <property>"; for Drive, "add <sa email> as Content Manager on the backup folder".
 *   **Truncation.** A day is `truncated` when a `page` or `page_query` pull returns 50,000 rows or more. That's the API's documented per-day, per-search-type cap. An exact multiple of 25,000 below the cap is not treated as truncated.
 
-#### C5. Opportunity rules (`sk/opps.py`)
+#### C5. Opportunity rules (`shrike/opps.py`)
 
 *   **Position bands.** Position is rounded half-up to an integer, then mapped to a band. A position of 20.5 or more has no band, so the page is skipped by `low_ctr`. The striking-distance bounds (5 to 20) apply to the rounded position.
 *   **Expected CTR.** Built from `v_gsc_page_query`, aggregated per `(page, query)` over the last `expected_ctr_days` (default 90) final days.
@@ -675,10 +675,10 @@ Triggers abort `UPDATE` and `DELETE` on the three `gsc_*` tables. Application co
     *   If none qualify, it sends only the summary card.
 *   **Resend.** A detected `dismissed` or `expired` opportunity returns to `new` when `status_changed_at` is at least `resend_after_weeks` old. `last_seen` doesn't affect this.
 *   **Open cards.** For a `sent` opportunity detected again, the weekly job calls `trello.update_card(card_id, name, desc)`, so the title's numbers are refreshed too.
-*   **Card titles:** `[site] Striking distance: "<query>" (pos 7.3)`, `[site] Low CTR: <path> (0.8% vs 2.1%)` and `[site] Decaying: <path> (−42% clicks)`. The summary title is `[Search Kestrel] Week of YYYY-MM-DD`.
+*   **Card titles:** `[site] Striking distance: "<query>" (pos 7.3)`, `[site] Low CTR: <path> (0.8% vs 2.1%)` and `[site] Decaying: <path> (−42% clicks)`. The summary title is `[Shrike] Week of YYYY-MM-DD`.
 *   **Templates.** Each template has the fields `why` and `fix`. No template may contain "FAQ rich result" or "llms.txt", and this is checked by `test_brief.py`.
 
-#### C6. Fix measurement rules (`sk/fixes.py`)
+#### C6. Fix measurement rules (`shrike/fixes.py`)
 
 *   **Ship date.** The Trello move timestamp is converted from UTC to a US Pacific date. A `shipped: YYYY-MM-DD` line in the card description is taken as a Pacific date.
 *   **Windows.** The before window is `ship_date − window_days` to `ship_date − 1`. The after window is `ship_date + 1` to `ship_date + window_days`. The ship date itself is in neither.
@@ -691,7 +691,7 @@ Triggers abort `UPDATE` and `DELETE` on the three `gsc_*` tables. Application co
     *   Comparison pages are the population pages in that same quartile.
 *   **Zero clicks.** A fixed page with 0 clicks before is never measured as growth. It's stored with `exclusion_reason = 'too little data'`.
 
-#### C7. Routes and MCP tools (`sk/routes.py`)
+#### C7. Routes and MCP tools (`shrike/routes.py`)
 
 Each route entry is `Route(method, path, handler, tool, description, params, remote)`. Each item in `params` is `Param(name, type, required, default, enum, description)`. The MCP `inputSchema` is generated from `params`.
 
@@ -699,13 +699,13 @@ Handlers have the signature `handler(ctx: ServerContext, conn, **params) -> dict
 
 | Method and path | Tool | Params | Response (JSON) |
 |---|---|---|---|
-| `GET /v1/setup` | `sk_setup` | none | `{checks: [Check], report_saved_at}` |
-| `GET /v1/sites` | `sk_sites` | none | `{sites: [{name, property, first_date, last_final_date, missing_days, comparison: Comparison}]}` |
-| `GET /v1/performance` | `sk_performance` | `site` (str, required), `page` (str), `query` (str), `start` and `end` (date; defaults to the 28 days ending at `last_final_date`), `compare` (enum `prev_period`, `prev_year`), `group_by` (enum `date`, `page`, `query`; default none), `limit` (int, default 50, max 1,000), `offset` (int, default 0) | `{site, start, end, totals: {clicks, impressions, ctr, position}, compare_totals?, rows: [{key, clicks, impressions, ctr, position, compare?: {...}}], next_offset?}` |
-| `GET /v1/opportunities` | `sk_opportunities` | `site` (str), `type` (enum of the three types), `status` (list of the five statuses; default `new,sent`), `limit` (default 50) | `{opportunities: [Opportunity]}` |
-| `GET /v1/fixes` | `sk_fixes` | `site` (str), `measured` (bool) | `{fixes: [Result plus page and ship_date], running_total}` |
-| `GET /v1/health` | `sk_health` | none | `{db: "ok" or "not initialized" or "schema old", runs: [last 20 job rows with their steps], missing_days, truncated_days, backup_age_hours, open_alerts: [events from the last 7 days]}`. `backup_age_hours` comes from the last `ok` `backup` step in `runs`, so the server makes no Drive call. With no database, only `db` is returned. |
-| `POST /v1/jobs` | `sk_run_job` | `job` (enum `nightly`, `weekly`, `backfill`; required) | `202 {unit}` or `409 {error: "already running"}` |
+| `GET /v1/setup` | `shrike_setup` | none | `{checks: [Check], report_saved_at}` |
+| `GET /v1/sites` | `shrike_sites` | none | `{sites: [{name, property, first_date, last_final_date, missing_days, comparison: Comparison}]}` |
+| `GET /v1/performance` | `shrike_performance` | `site` (str, required), `page` (str), `query` (str), `start` and `end` (date; defaults to the 28 days ending at `last_final_date`), `compare` (enum `prev_period`, `prev_year`), `group_by` (enum `date`, `page`, `query`; default none), `limit` (int, default 50, max 1,000), `offset` (int, default 0) | `{site, start, end, totals: {clicks, impressions, ctr, position}, compare_totals?, rows: [{key, clicks, impressions, ctr, position, compare?: {...}}], next_offset?}` |
+| `GET /v1/opportunities` | `shrike_opportunities` | `site` (str), `type` (enum of the three types), `status` (list of the five statuses; default `new,sent`), `limit` (default 50) | `{opportunities: [Opportunity]}` |
+| `GET /v1/fixes` | `shrike_fixes` | `site` (str), `measured` (bool) | `{fixes: [Result plus page and ship_date], running_total}` |
+| `GET /v1/health` | `shrike_health` | none | `{db: "ok" or "not initialized" or "schema old", runs: [last 20 job rows with their steps], missing_days, truncated_days, backup_age_hours, open_alerts: [events from the last 7 days]}`. `backup_age_hours` comes from the last `ok` `backup` step in `runs`, so the server makes no Drive call. With no database, only `db` is returned. |
+| `POST /v1/jobs` | `shrike_run_job` | `job` (enum `nightly`, `weekly`, `backfill`; required) | `202 {unit}` or `409 {error: "already running"}` |
 | `GET /health` | none | none | `{ok: true}`, with no key needed (as in Kestrel) |
 
 `/v1/performance` uses `v_gsc_site` when neither `page` nor `query` is given and `group_by` isn't `page` or `query`. It uses `v_gsc_page` when `page` is given without `query` and `group_by` isn't `query`. Otherwise it uses `v_gsc_page_query`.
@@ -730,7 +730,7 @@ Rows are sorted by date ascending for `group_by=date`, and by clicks descending 
 
 Only `POST /v1/jobs` is `remote = false`.
 
-#### C8. HTTP server behavior (`sk/server.py`)
+#### C8. HTTP server behavior (`shrike/server.py`)
 
 *   **Auth.** `/v1/` routes accept `X-API-Key: <key>` or `Authorization: Bearer <key>`, compared in constant time.
 *   **Errors.** Every error body is `{"error": str, "fix_step": str | null}`.
@@ -747,19 +747,19 @@ Only `POST /v1/jobs` is `remote = false`.
 | Any other exception | 500 with `{"error": "internal error"}`. The log gets only `repr(exc)`, never a traceback with request data. |
 
 *   **Database state.** The server checks the database on each request, caching the result for 5 seconds, so a later setup or migration is picked up without a restart.
-    *   If `data.sqlite` is missing, only `/health`, `/v1/setup` and `/v1/health` answer. They report "database not initialized; run `sk-jobs setup`".
-    *   If the schema version is older than the code's, all other routes return 503, "run `sk-jobs setup` to migrate".
+    *   If `data.sqlite` is missing, only `/health`, `/v1/setup` and `/v1/health` answer. They report "database not initialized; run `shrike setup`".
+    *   If the schema version is older than the code's, all other routes return 503, "run `shrike setup` to migrate".
     *   The server never migrates.
-*   **Read-only access to a WAL database.** The server unit has `ReadWritePaths=/var/lib/search-kestrel`, so SQLite can create the `-wal` and `-shm` files when no writer is running. The connection itself stays `mode=ro`, so the server still can't write data.
+*   **Read-only access to a WAL database.** The server unit has `ReadWritePaths=/var/lib/shrike`, so SQLite can create the `-wal` and `-shm` files when no writer is running. The connection itself stays `mode=ro`, so the server still can't write data.
 *   **Log masking.** `log_message` and `log_error` apply `re.sub(r"/mcp/[^\s/?]+", "/mcp/***", ...)` to the fully formatted message, including the request line passed in `args`.
 
-#### C9. Remote MCP behavior (`sk/mcp_remote.py`), following `scout_remote_mcp.py`
+#### C9. Remote MCP behavior (`shrike/mcp_remote.py`), following `scout_remote_mcp.py`
 
 *   **Signature:** `handle(ctx, routes, msg) -> dict | None`.
 *   **Batches:** a JSON array is handled item by item.
 *   **Notifications:** a message with no `id` returns `None`. If every item returns `None`, the server answers 202 with an empty body.
 *   **Methods:**
-    *   `initialize` returns `protocolVersion`, `capabilities: {tools: {}}` and `serverInfo: {name: "search-kestrel", version}`. The supported versions are `2024-11-05`, `2025-03-26` and `2025-06-18`. The client's version is used if supported, otherwise `2025-06-18`.
+    *   `initialize` returns `protocolVersion`, `capabilities: {tools: {}}` and `serverInfo: {name: "shrike", version}`. The supported versions are `2024-11-05`, `2025-03-26` and `2025-06-18`. The client's version is used if supported, otherwise `2025-06-18`.
     *   `ping` returns `{}`.
     *   `tools/list` returns the remote tools.
     *   `tools/call` runs the handler. Its result is `{content: [{type: "text", text: json}]}`, with `isError: true` on a handler error.
@@ -767,9 +767,9 @@ Only `POST /v1/jobs` is `remote = false`.
 *   **Output cap:** tool output over `MAX_CHARS = 60000` is truncated, with a note saying so.
 *   **HTTP limits:** non-POST requests get 405. Bodies over 4 MiB get 413. A body that isn't JSON gets 400.
 
-#### C10. Local MCP behavior (`sk/mcp_stdio.py`), following `scout_mcp.py`
+#### C10. Local MCP behavior (`shrike/mcp_stdio.py`), following `scout_mcp.py`
 
-*   It reads `SK_URL` and `SK_API_KEY`.
+*   It reads `SHRIKE_URL` and `SHRIKE_API_KEY`.
 *   Messages without an `id` (notifications) get no reply. Lines that aren't valid JSON are skipped.
 *   `initialize` negotiates the protocol version the same way as C9.
 *   It handles `initialize`, `ping` and `tools/list`. `tools/call` is a request to the route's method and path: GET parameters go in the query string, and POST parameters in a JSON body.
@@ -778,7 +778,7 @@ Only `POST /v1/jobs` is `remote = false`.
 *   Output is truncated at `MAX_CHARS`.
 *   An unknown method returns -32601, and an unknown tool returns -32602.
 
-#### C11. Health checks and alerts (`sk/health.py`)
+#### C11. Health checks and alerts (`shrike/health.py`)
 
 Usage: `with health.step(ctx, job, name) as s: ...`. After the block, `s.ok` tells whether the step succeeded.
 
@@ -800,7 +800,7 @@ Usage: `with health.step(ctx, job, name) as s: ...`. After the block, `s.ok` tel
 | `backup_stale` | `target` | the finish time of the last `ok` `backup` step in `runs` | `backup_max_hours = 48` | daily |
 | `weekly_missing` | `weekly` | `now − max(last ok weekly job, meta.phase1_seen_at)` | `weekly_max_days = 8`, checked only when `general.phase >= 1` | daily |
 
-#### C12. Trello client (`sk/trello.py`)
+#### C12. Trello client (`shrike/trello.py`)
 
 Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello code wasn't reviewed for this plan.
 
@@ -824,13 +824,13 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   A Done card with no `updateCard:idList` action uses the card's `dateLastActivity` as the move time.
 *   `FakeTrello` has the same methods.
 
-#### C13. Backups (`sk/backup.py`)
+#### C13. Backups (`shrike/backup.py`)
 
 *   The snapshot is written to `<data_dir>/tmp/`.
-*   The file name is `sk-YYYYMMDDTHHMMZ.sqlite.gz`, in UTC. The backup time used everywhere is parsed from this name.
+*   The file name is `shrike-YYYYMMDDTHHMMZ.sqlite.gz`, in UTC. The backup time used everywhere is parsed from this name.
 *   Drive uploads use `MediaFileUpload(resumable=True, chunksize=8 MiB)`.
 *   **Retention.** Keep the newest file of each of the last `keep_daily` UTC days, plus the newest file of each of the last `keep_monthly` UTC months. A file can satisfy both rules, so the kept set is the union of the two.
-*   **Drive calls.** Every Drive call passes `supportsAllDrives=True`. Listing uses `files.list(q="'<folder_id>' in parents and trashed = false and name contains 'sk-'", corpora="drive", driveId=<shared drive id>, includeItemsFromAllDrives=True, supportsAllDrives=True, fields="files(id,name)")`. The shared drive id is read once from `files.get(folder_id, fields="driveId")`.
+*   **Drive calls.** Every Drive call passes `supportsAllDrives=True`. Listing uses `files.list(q="'<folder_id>' in parents and trashed = false and name contains 'shrike-'", corpora="drive", driveId=<shared drive id>, includeItemsFromAllDrives=True, supportsAllDrives=True, fields="files(id,name)")`. The shared drive id is read once from `files.get(folder_id, fields="driveId")`.
 *   **Prune.** In `gdrive` mode, prune moves files to the trash with `files.update(trashed=True)`, because a Content Manager can't permanently delete. In `local` mode it unlinks them.
 *   **`verify_latest`.** For each site, it counts `final` and `truncated` rows in the backup's `v_coverage`. It passes when that count is at least the live count minus the number of `ok` pulls with `finished_at` after the backup's UTC time.
 
@@ -838,13 +838,13 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 
 *   **Exit codes:** 0 for OK, 10 for one or more steps failed and were alerted, 2 for a config error, and 3 for already running. A Python traceback exits 1, which isn't in `SuccessExitStatus`, so crashes always alert. `TimeoutStartSec=` is used, not `RuntimeMaxSec=`, because `RuntimeMaxSec=` has no effect on `Type=oneshot` units.
 *   **Job units.**
-    *   All job units set `SuccessExitStatus=10 3`, so `OnFailure=sk-alert@%n.service` fires only for crashes, kills and exit 2.
+    *   All job units set `SuccessExitStatus=10 3`, so `OnFailure=shrike-alert@%n.service` fires only for crashes, kills and exit 2.
     *   A nightly run skipped with exit 3 writes no `runs` row, but still pings the dead-man URL. The VM is alive and a writer is running, so a long backfill doesn't trigger a false email.
     *   If two starts race, `flock` decides. The loser exits 3 and logs "already running" to its journal, while the API has already answered 202.
-    *   Because `sk-jobs setup` also holds the writer lock, a job started during setup can exit 3 in the same way.
-    *   **Hung writers.** `TimeoutStartSec=` is `12h` on `sk-backfill.service` and `2h` on `sk-nightly.service`, `sk-weekly.service` and `sk-setup.service`. A unit killed at the limit fails, so `OnFailure=sk-alert@` fires and the lock is released. Without this, exit-3 pings could hide a stuck backfill for days.
-*   **Unit sections.** Every timer has `[Install] WantedBy=timers.target`. `search-kestrel.service` has `[Install] WantedBy=multi-user.target`.
-*   **Timers.** `sk-jobs render-units` writes `/etc/systemd/system/sk-nightly.timer` and `/etc/systemd/system/sk-weekly.timer` from `[schedule]` and `general.timezone`, for example `OnCalendar=*-*-* 03:30 Europe/Amsterdam`. These timer files aren't in the repo. `install.sh` runs it, and docs/OPERATIONS.md says to run it again (then `systemctl daemon-reload`) after changing the schedule.
+    *   Because `shrike setup` also holds the writer lock, a job started during setup can exit 3 in the same way.
+    *   **Hung writers.** `TimeoutStartSec=` is `12h` on `shrike-backfill.service` and `2h` on `shrike-nightly.service`, `shrike-weekly.service` and `shrike-setup.service`. A unit killed at the limit fails, so `OnFailure=shrike-alert@` fires and the lock is released. Without this, exit-3 pings could hide a stuck backfill for days.
+*   **Unit sections.** Every timer has `[Install] WantedBy=timers.target`. `shrike.service` has `[Install] WantedBy=multi-user.target`.
+*   **Timers.** `shrike render-units` writes `/etc/systemd/system/shrike-nightly.timer` and `/etc/systemd/system/shrike-weekly.timer` from `[schedule]` and `general.timezone`, for example `OnCalendar=*-*-* 03:30 Europe/Amsterdam`. These timer files aren't in the repo. `install.sh` runs it, and docs/OPERATIONS.md says to run it again (then `systemctl daemon-reload`) after changing the schedule.
 
 ### Target Files to Create/Modify
 
@@ -861,7 +861,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 #### 3. `requirements.txt` (Create) [P0]
 
 *   **Type / Scope**: Dependencies
-*   **Proposed Changes**: Only `google-auth`, `google-api-python-client` and `requests`. Each is pinned with `==` to its latest release on the day Phase 0 starts, and a comment says why it's there. It's installed into `/opt/search-kestrel/venv`.
+*   **Proposed Changes**: Only `google-auth`, `google-api-python-client` and `requests`. Each is pinned with `==` to its latest release on the day Phase 0 starts, and a comment says why it's there. It's installed into `/opt/shrike/venv`.
 
 #### 3a. `requirements-dev.txt` (Create) [P0]
 
@@ -871,13 +871,13 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 #### 4. `pyproject.toml` (Create) [P0]
 
 *   **Type / Scope**: Build configuration
-*   **Proposed Changes**: The package metadata, `requires-python = ">=3.11"`, and the `sk` package. It defines console scripts: `sk-jobs` runs `sk.jobs:main`, `sk-server` runs `sk.server:main`, and `sk-mcp` runs `sk.mcp_stdio:main`. It includes `sk/migrations/*.sql` as package data. It also holds the `ruff` lint settings.
+*   **Proposed Changes**: The package metadata, `requires-python = ">=3.11"`, and the `shrike` package. It defines console scripts: `shrike` runs `shrike.jobs:main`, `shrike-server` runs `shrike.server:main`, and `shrike-mcp` runs `shrike.mcp_stdio:main`. It includes `shrike/migrations/*.sql` as package data. It also holds the `ruff` lint settings.
 
 #### 5. `config.example.toml` (Create) [P0]
 
 *   **Type / Scope**: Configuration template
 *   **Proposed Changes**: Every setting, each with a comment and a default:
-    *   `[general]`: `phase = 0` (set to 1 once Phase 1 is installed; this turns on the Trello sync, the weekly job and the weekly-missing check), `timezone`, `data_dir = "/var/lib/search-kestrel"`, and `dead_man_url` (required for G5; the setup check warns if it's empty).
+    *   `[general]`: `phase = 0` (set to 1 once Phase 1 is installed; this turns on the Trello sync, the weekly job and the weekly-missing check), `timezone`, `data_dir = "/var/lib/shrike"`, and `dead_man_url` (required for G5; the setup check warns if it's empty).
     *   `[pull]`: `pull_pause_seconds = 0.5`.
     *   `[health]`: `gap_days = 3`, `expiry_warn_days = 14`, `backup_max_hours = 48` and `weekly_max_days = 8`.
     *   `[[sites]]`: `name` (used in MCP calls and card titles) and `property`. There are two example entries.
@@ -895,32 +895,32 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 #### 6. `.env.example` (Create) [P0]
 
 *   **Type / Scope**: Secrets template
-*   **Proposed Changes**: Placeholder names only: `SK_SERVICE_ACCOUNT_FILE`, `SK_TRELLO_KEY`, `SK_TRELLO_TOKEN`, `SK_API_KEY` (at least 24 characters), `SK_MCP_SECRET` (optional; at least 24 characters when set), `SK_CONFIG` and `SK_URL` (for `sk-mcp`). C1 says which entry point needs which.
+*   **Proposed Changes**: Placeholder names only: `SHRIKE_SERVICE_ACCOUNT_FILE`, `SHRIKE_TRELLO_KEY`, `SHRIKE_TRELLO_TOKEN`, `SHRIKE_API_KEY` (at least 24 characters), `SHRIKE_MCP_SECRET` (optional; at least 24 characters when set), `SHRIKE_CONFIG` and `SHRIKE_URL` (for `shrike-mcp`). C1 says which entry point needs which.
 
 #### 7. `.gitignore` (Create) [P0]
 
 *   **Type / Scope**: Repo hygiene
 *   **Proposed Changes**: Ignores `config.toml`, `.env`, `*.json` key files, `*.sqlite*`, `venv/`, `__pycache__/` and backup files. This keeps real sites and secrets out of the public repo (G7).
 
-#### 8. `sk/__init__.py` (Create) [P0]
+#### 8. `shrike/__init__.py` (Create) [P0]
 
 *   **Type / Scope**: Python package
 *   **Proposed Changes**: Holds `__version__` and nothing else.
 
-#### 9. `sk/config.py` (Create) [P0]
+#### 9. `shrike/config.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
     *   `load_config(path) -> Config`: reads TOML with `tomllib`, applies defaults, and checks the values. Every error names the bad key and the expected form, for example `sites[1].property must start with "sc-domain:" or "https://"`.
-    *   `load_secrets(entry) -> Secrets`: reads the variables that entry point needs (C1). It checks the modes of `SK_ENV_FILE` and the key file, and the length rules for `SK_API_KEY` and `SK_MCP_SECRET`. On failure it raises `ConfigError` with a fix step.
+    *   `load_secrets(entry) -> Secrets`: reads the variables that entry point needs (C1). It checks the modes of `SHRIKE_ENV_FILE` and the key file, and the length rules for `SHRIKE_API_KEY` and `SHRIKE_MCP_SECRET`. On failure it raises `ConfigError` with a fix step.
     *   Both results are immutable dataclasses.
 
-#### 10. `sk/errors.py` (Create) [P0]
+#### 10. `shrike/errors.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**: Defines `SkError(msg, status, fix_step)`, with subclasses `ConfigError`, `AuthError`, `QuotaError` and `UpstreamError`. Every error carries a `fix_step` string, which both the alerts and the setup check show.
 
-#### 11. `sk/migrations/001_init.sql` (Create) [P0]
+#### 11. `shrike/migrations/001_init.sql` (Create) [P0]
 
 *   **Type / Scope**: Database schema
 *   **Proposed Changes**:
@@ -932,19 +932,19 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   `v_coverage` is the recursive-CTE view from C2, so dates that were never pulled show as `missing`.
     *   The triggers stop application code from updating or deleting final rows.
 
-#### 12. `sk/db.py` (Create) [P0]
+#### 12. `shrike/db.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
     *   `connect(path) -> sqlite3.Connection`: turns on WAL mode, foreign keys and `busy_timeout = 10000`.
     *   `connect_ro(path)`: opens the database with `mode=ro`, for the server.
-    *   `migrate(conn)`: reads the migrations from `importlib.resources.files("sk.migrations")`. If any `NNN_*.sql` is newer than `schema_version`, it first writes `snapshot(conn, <data_dir>/pre-migrate-<version>.sqlite)`, then runs the migrations in order, one transaction each. The 3 newest pre-migrate snapshots are kept.
+    *   `migrate(conn)`: reads the migrations from `importlib.resources.files("shrike.migrations")`. If any `NNN_*.sql` is newer than `schema_version`, it first writes `snapshot(conn, <data_dir>/pre-migrate-<version>.sqlite)`, then runs the migrations in order, one transaction each. The 3 newest pre-migrate snapshots are kept.
     *   `store_final(conn, pull, rows)`: in one transaction, it inserts the `pulls` row (with `truncated`) and the rows into the matching table.
     *   `record_failed_pull(conn, pull, error)`: inserts a `status = 'error'` row.
     *   `set_range(conn, site, first_date=None, last_final_date=None)`: writes `site_range`. `first_date` is written only if it's empty.
     *   `snapshot(conn, dest_path)`: uses `sqlite3.Connection.backup`.
 
-#### 13. `sk/google_auth.py` (Create) [P0]
+#### 13. `shrike/google_auth.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -953,7 +953,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   Scopes: `webmasters.readonly` and `drive`. `drive` is used because `drive.file` covers only files the app created, and the backup folder is created by a person. Access is limited by sharing the service account into that one folder only.
     *   It maps HTTP 401 and 403 to `AuthError`, with the fix step "add <service account email> as a Restricted user on <property>".
 
-#### 14. `sk/gsc.py` (Create) [P0]
+#### 14. `shrike/gsc.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -969,7 +969,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   Truncation and pacing follow C4.
     *   All dates are Search Console dates (US Pacific).
 
-#### 15. `sk/coverage.py` (Create) [P0]
+#### 15. `shrike/coverage.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -977,7 +977,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   `expired(conn, site, oldest) -> list[date]`: `v_coverage` `missing` rows with date before today's `oldest`. These can never be pulled now. The range starts at `site_range.first_date`, the fixed lower bound.
     *   `oldest_missing(conn, site) -> date | None`: used for the expiry alert.
 
-#### 16. `sk/opps.py` (Create) [P1]
+#### 16. `shrike/opps.py` (Create) [P1]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -994,13 +994,13 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   Status changes always set `status_changed_at`. The resend rule in C5 uses that field, not `last_seen`.
     *   Each rule is a pure function of plain rows, so it can be tested without a database.
 
-#### 17. `sk/trello.py` (Create) [P0]
+#### 17. `shrike/trello.py` (Create) [P0]
 
 *   **Type / Scope**: Python module, written fresh (C12)
 *   **Proposed Changes**:
     *   The `Trello` class, exactly as specified in C12: its methods, credential header, error scrubbing and error handling. It uses `requests`.
 
-#### 18. `sk/brief.py` (Create) [P1]
+#### 18. `shrike/brief.py` (Create) [P1]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -1010,15 +1010,15 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
         *   the selected opportunities,
         *   the fixes measured this week, with the running total.
     *   `render_summary(brief) -> (title, markdown)` and `render_card(opp) -> (title, markdown)`.
-    *   The fix text comes from one template per opportunity type, held in `sk/templates.py`.
+    *   The fix text comes from one template per opportunity type, held in `shrike/templates.py`.
     *   `send(conn, brief, trello)`: creates the cards and stores each card ID on its opportunity, setting the status to `sent`. A card that fails to send leaves its opportunity `new` for the next run.
 
-#### 19. `sk/templates.py` (Create) [P1]
+#### 19. `shrike/templates.py` (Create) [P1]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**: Holds the `why` and `fix` templates for `striking_distance`, `low_ctr` and `decaying`, with named placeholders for the numbers, plus the card title formats in C5. They use no AI, and they follow the word ban in C5.
 
-#### 20. `sk/fixes.py` (Create) [P1]
+#### 20. `shrike/fixes.py` (Create) [P1]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -1035,7 +1035,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   Comparison group, windows, time zone, quartiles and zero-click handling: exactly as in C6.
     *   `running_total(conn) -> float`: the sum of `effect_clicks` over included results, in extra clicks per 28 days.
 
-#### 21. `sk/backup.py` (Create) [P0]
+#### 21. `shrike/backup.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -1054,7 +1054,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
         3.  Moves the file to the trash.
         4.  Reports `local` mode as "G1 not met".
 
-#### 22. `sk/health.py` (Create) [P0]
+#### 22. `shrike/health.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -1066,14 +1066,14 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   `checks(ctx) -> list[Problem]`: every row of the C11 table, with its kind, subject, source and threshold.
     *   `ping_dead_man(cfg)`: a GET to `dead_man_url`. It's called at the end of nightly, unless the run has an undelivered alert. A failed ping is logged and doesn't count as a job failure.
 
-#### 22a. `sk/baseline.py` (Create) [P0]
+#### 22a. `shrike/baseline.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
     *   `freeze(conn, site, label="initial")`: it refuses (logs and returns) unless `v_gsc_site` has all 28 final days of the window. Otherwise, if no row exists for `site` and `label`, it sums the 28 final days ending at the newest final date from `v_gsc_site`, and inserts one `baselines` row. It never updates an existing row. The unique index makes a second insert fail.
     *   `compare(conn, site, end_date) -> Comparison`: returns the last 28 final days against the `initial` baseline, as numbers and percent, for the brief header and `/v1/sites`.
 
-#### 23. `sk/jobs.py` (Create) [P0]
+#### 23. `shrike/jobs.py` (Create) [P0]
 
 *   **Type / Scope**: Python module and CLI entry point
 *   **Proposed Changes**:
@@ -1110,12 +1110,12 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
         *   2: config error,
         *   3: already running.
 
-#### 24. `sk/setup_check.py` (Create) [P0]
+#### 24. `shrike/setup_check.py` (Create) [P0]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
     *   `readonly_report(cfg, secrets, conn_ro) -> list[Check]`, used by `GET /v1/setup`. It reads the saved `setup_report.json` and adds the config, file-mode, secret length, dead-man URL and last-run checks. It writes nothing.
-    *   `full_report(cfg, secrets, conn) -> list[Check]`, used only by `sk-jobs setup`. Each `Check` follows C3. It checks:
+    *   `full_report(cfg, secrets, conn) -> list[Check]`, used only by `shrike setup`. Each `Check` follows C3. It checks:
     *   the config parses,
     *   the modes of the env file and key file,
     *   the MCP secret's length,
@@ -1128,7 +1128,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 
     It plays the role of Kestrel's `kestrel_setup` (`evogr1/kestrel`, `scout_mcp.py`, since 1.4.1; the reference copy reviewed for this plan is older and doesn't have it).
 
-#### 25. `sk/routes.py` (Create) [P1]
+#### 25. `shrike/routes.py` (Create) [P1]
 
 *   **Type / Scope**: Python module
 *   **Proposed Changes**:
@@ -1139,75 +1139,75 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
         *   `compare` (`prev_period` or `prev_year`),
         *   `group_by` (`date`, `page` or `query`),
         *   `limit` (default 50, max 1,000) and `offset`.
-    *   Each route entry has a `remote` flag. `POST /v1/jobs` (MCP tool `sk_run_job`) has `remote = false`.
+    *   Each route entry has a `remote` flag. `POST /v1/jobs` (MCP tool `shrike_run_job`) has `remote = false`.
 
-#### 26. `sk/server.py` (Create) [P1]
+#### 26. `shrike/server.py` (Create) [P1]
 
 *   **Type / Scope**: Python module (pattern copied from Kestrel's `scout_server.py`)
 *   **Proposed Changes**:
     *   `make_server(cfg, api_key, mcp_secret)`: a `ThreadingHTTPServer` on the configured host and port.
     *   Auth, error handling, startup behavior and log masking follow C8.
     *   `POST /v1/jobs` with `job` set to `nightly`, `weekly` or `backfill`:
-        1.  Reads `systemctl show -p ActiveState --value` for the three writer units, `sk-nightly`, `sk-weekly` and `sk-backfill`. If any is `activating`, `active` or `deactivating`, it returns 409.
-        2.  Otherwise it runs `systemctl start --no-block sk-<job>.service` and returns 202 `{unit}`.
+        1.  Reads `systemctl show -p ActiveState --value` for the three writer units, `shrike-nightly`, `shrike-weekly` and `shrike-backfill`. If any is `activating`, `active` or `deactivating`, it returns 409.
+        2.  Otherwise it runs `systemctl start --no-block shrike-<job>.service` and returns 202 `{unit}`.
         3.  A race between the check and the start is settled by `flock` (C14).
 
-        The polkit rule in `deploy/polkit/50-search-kestrel.rules` allows the `sk` user to start only those three units.
-    *   `POST /mcp/<secret>`: compares the path secret with `hmac.compare_digest`, then passes the request to `mcp_remote.handle`. A wrong secret, or an empty `SK_MCP_SECRET`, returns 404. The HTTP limits are in C9.
+        The polkit rule in `deploy/polkit/50-shrike.rules` allows the `shrike` user to start only those three units.
+    *   `POST /mcp/<secret>`: compares the path secret with `hmac.compare_digest`, then passes the request to `mcp_remote.handle`. A wrong secret, or an empty `SHRIKE_MCP_SECRET`, returns 404. The HTTP limits are in C9.
     *   The database is opened through `db.connect_ro`. The server never writes to it.
 
-#### 27. `sk/mcp_stdio.py` (Create) [P1]
+#### 27. `shrike/mcp_stdio.py` (Create) [P1]
 
 *   **Type / Scope**: Python module (pattern copied from Kestrel's `scout_mcp.py`)
-*   **Proposed Changes**: A stdio JSON-RPC MCP server that behaves as described in C10. `tools/list` is built from `routes.py`, and `tools/call` forwards to `SK_URL` with `SK_API_KEY`. Tool names: `sk_setup`, `sk_sites`, `sk_performance`, `sk_opportunities`, `sk_fixes`, `sk_health` and `sk_run_job`.
+*   **Proposed Changes**: A stdio JSON-RPC MCP server that behaves as described in C10. `tools/list` is built from `routes.py`, and `tools/call` forwards to `SHRIKE_URL` with `SHRIKE_API_KEY`. Tool names: `shrike_setup`, `shrike_sites`, `shrike_performance`, `shrike_opportunities`, `shrike_fixes`, `shrike_health` and `shrike_run_job`.
 
-#### 28. `sk/mcp_remote.py` (Create) [P1]
+#### 28. `shrike/mcp_remote.py` (Create) [P1]
 
 *   **Type / Scope**: Python module (pattern copied from Kestrel's `scout_remote_mcp.py`)
-*   **Proposed Changes**: `handle(ctx, routes, msg)` implements C9 for requests that have already passed the server's path-secret check. `tools/list` and `tools/call` only include routes with `remote = true`, so `sk_run_job` is never available remotely.
+*   **Proposed Changes**: `handle(ctx, routes, msg)` implements C9 for requests that have already passed the server's path-secret check. `tools/list` and `tools/call` only include routes with `remote = true`, so `shrike_run_job` is never available remotely.
 
-#### 29. `deploy/systemd/search-kestrel.service` (Create) [P1]
+#### 29. `deploy/systemd/shrike.service` (Create) [P1]
 
 *   **Type / Scope**: Deployment
 *   **Proposed Changes**:
-    *   Runs `/opt/search-kestrel/venv/bin/sk-server` with `User=sk`, `EnvironmentFile=/etc/search-kestrel/env`, `Environment=SK_ENV_FILE=/etc/search-kestrel/env` and `Restart=on-failure`.
-    *   Locked down with `ProtectSystem=strict`, `ReadWritePaths=/var/lib/search-kestrel` (needed for SQLite's WAL side files, see C8) and `NoNewPrivileges=yes`.
+    *   Runs `/opt/shrike/venv/bin/shrike-server` with `User=shrike`, `EnvironmentFile=/etc/shrike/env`, `Environment=SHRIKE_ENV_FILE=/etc/shrike/env` and `Restart=on-failure`.
+    *   Locked down with `ProtectSystem=strict`, `ReadWritePaths=/var/lib/shrike` (needed for SQLite's WAL side files, see C8) and `NoNewPrivileges=yes`.
     *   It's enabled by `install.sh --phase 1`.
 
-#### 30. `deploy/systemd/sk-nightly.service` and `deploy/systemd/sk-nightly.timer` (Create) [P0]
+#### 30. `deploy/systemd/shrike-nightly.service` and `deploy/systemd/shrike-nightly.timer` (Create) [P0]
 
 *   **Type / Scope**: Deployment
 *   **Proposed Changes**: The repo holds only the `.service` file. The `.timer` is generated (C14).
-    *   The service is a oneshot running `/opt/search-kestrel/venv/bin/sk-jobs nightly`, with:
-        *   `User=sk`, `EnvironmentFile=/etc/search-kestrel/env` and `Environment=SK_ENV_FILE=/etc/search-kestrel/env`,
-        *   `StateDirectory=search-kestrel`, `StateDirectoryMode=0700`, `ProtectSystem=strict` and `NoNewPrivileges=yes`,
-        *   `SuccessExitStatus=10 3`, `OnFailure=sk-alert@%n.service` and `TimeoutStartSec=2h` (C14).
-    *   The timer is generated by `sk-jobs render-units` (C14), with `Persistent=true` (so a missed run happens at boot) and `RandomizedDelaySec=300`.
+    *   The service is a oneshot running `/opt/shrike/venv/bin/shrike nightly`, with:
+        *   `User=shrike`, `EnvironmentFile=/etc/shrike/env` and `Environment=SHRIKE_ENV_FILE=/etc/shrike/env`,
+        *   `StateDirectory=shrike`, `StateDirectoryMode=0700`, `ProtectSystem=strict` and `NoNewPrivileges=yes`,
+        *   `SuccessExitStatus=10 3`, `OnFailure=shrike-alert@%n.service` and `TimeoutStartSec=2h` (C14).
+    *   The timer is generated by `shrike render-units` (C14), with `Persistent=true` (so a missed run happens at boot) and `RandomizedDelaySec=300`.
 
-#### 31. `deploy/systemd/sk-weekly.service` and `deploy/systemd/sk-weekly.timer` (Create) [P1]
-
-*   **Type / Scope**: Deployment
-*   **Proposed Changes**: The repo holds only the `.service` file, with the same directives as the nightly service, word for word, running `sk-jobs weekly`. The timer is generated from `[schedule].weekly` (C14).
-
-#### 31c. `deploy/systemd/sk-setup.service` (Create) [P0]
+#### 31. `deploy/systemd/shrike-weekly.service` and `deploy/systemd/shrike-weekly.timer` (Create) [P1]
 
 *   **Type / Scope**: Deployment
-*   **Proposed Changes**: A oneshot running `sk-jobs setup`, with the same directives as the nightly service, but no `OnFailure=`. `install.sh` starts it, so setup runs as `sk` with the env file and the state directory. Files it creates are therefore owned by `sk`.
+*   **Proposed Changes**: The repo holds only the `.service` file, with the same directives as the nightly service, word for word, running `shrike weekly`. The timer is generated from `[schedule].weekly` (C14).
 
-#### 31a. `deploy/systemd/sk-backfill.service` (Create) [P0]
-
-*   **Type / Scope**: Deployment
-*   **Proposed Changes**: A oneshot running `sk-jobs backfill`, with the same directives as the nightly service except `TimeoutStartSec=12h`, and no timer. It's started by hand or through `POST /v1/jobs` with `job=backfill`, so a long backfill survives server restarts.
-
-#### 31b. `deploy/polkit/50-search-kestrel.rules` (Create) [P1]
+#### 31c. `deploy/systemd/shrike-setup.service` (Create) [P0]
 
 *   **Type / Scope**: Deployment
-*   **Proposed Changes**: A polkit rule that lets the `sk` user run `systemctl start` on `sk-nightly.service`, `sk-weekly.service` and `sk-backfill.service` only.
+*   **Proposed Changes**: A oneshot running `shrike setup`, with the same directives as the nightly service, but no `OnFailure=`. `install.sh` starts it, so setup runs as `shrike` with the env file and the state directory. Files it creates are therefore owned by `shrike`.
 
-#### 32. `deploy/systemd/sk-alert@.service` (Create) [P0]
+#### 31a. `deploy/systemd/shrike-backfill.service` (Create) [P0]
 
 *   **Type / Scope**: Deployment
-*   **Proposed Changes**: A oneshot running `sk-jobs alert --unit %i`, with the same `User`, `EnvironmentFile` and sandbox directives as the nightly service. It posts a Trello alert card when a job process crashed or was killed, or exited with code 2.
+*   **Proposed Changes**: A oneshot running `shrike backfill`, with the same directives as the nightly service except `TimeoutStartSec=12h`, and no timer. It's started by hand or through `POST /v1/jobs` with `job=backfill`, so a long backfill survives server restarts.
+
+#### 31b. `deploy/polkit/50-shrike.rules` (Create) [P1]
+
+*   **Type / Scope**: Deployment
+*   **Proposed Changes**: A polkit rule that lets the `shrike` user run `systemctl start` on `shrike-nightly.service`, `shrike-weekly.service` and `shrike-backfill.service` only.
+
+#### 32. `deploy/systemd/shrike-alert@.service` (Create) [P0]
+
+*   **Type / Scope**: Deployment
+*   **Proposed Changes**: A oneshot running `shrike alert --unit %i`, with the same `User`, `EnvironmentFile` and sandbox directives as the nightly service. It posts a Trello alert card when a job process crashed or was killed, or exited with code 2.
 
 #### 33. `deploy/install.sh` (Create) [P0]
 
@@ -1217,20 +1217,20 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 
     **Every run:**
 
-    1.  Creates the `sk` user if missing, `/etc/search-kestrel/` (`root:sk` 750) and `/var/lib/search-kestrel` (`sk:sk` 700). It expects the repo to be cloned at `/opt/search-kestrel`.
-    2.  Creates or updates the venv, then runs `pip install -r requirements.txt` and `pip install /opt/search-kestrel`.
-    3.  If they're missing, copies `config.example.toml` to `config.toml` (`root:sk` 640) and creates an empty `env` (`root:root` 600). It never overwrites either.
-    4.  Copies `sk-nightly.service`, `sk-backfill.service`, `sk-setup.service` and `sk-alert@.service`.
-        *   With `--phase 1`, it also copies `sk-weekly.service`, `search-kestrel.service` and the polkit rule. It doesn't edit `config.toml`. If `general.phase` there isn't `1`, it prints "set general.phase = 1 in config.toml" and stops.
-    5.  If `env` is still empty, prints "fill in /etc/search-kestrel/env and config.toml, then run install.sh again" and stops.
+    1.  Creates the `shrike` user if missing, `/etc/shrike/` (`root:shrike` 750) and `/var/lib/shrike` (`shrike:shrike` 700). It expects the repo to be cloned at `/opt/shrike`.
+    2.  Creates or updates the venv, then runs `pip install -r requirements.txt` and `pip install /opt/shrike`.
+    3.  If they're missing, copies `config.example.toml` to `config.toml` (`root:shrike` 640) and creates an empty `env` (`root:root` 600). It never overwrites either.
+    4.  Copies `shrike-nightly.service`, `shrike-backfill.service`, `shrike-setup.service` and `shrike-alert@.service`.
+        *   With `--phase 1`, it also copies `shrike-weekly.service`, `shrike.service` and the polkit rule. It doesn't edit `config.toml`. If `general.phase` there isn't `1`, it prints "set general.phase = 1 in config.toml" and stops.
+    5.  If `env` is still empty, prints "fill in /etc/shrike/env and config.toml, then run install.sh again" and stops.
 
     **Once `env` is filled in:**
 
-    6.  Runs `sk-jobs render-units` and `systemctl daemon-reload`.
-    7.  Runs `systemctl start --wait sk-setup.service`. If setup reports failures, it prints them and stops.
-    8.  On the first successful run, starts `sk-backfill.service`.
+    6.  Runs `shrike render-units` and `systemctl daemon-reload`.
+    7.  Runs `systemctl start --wait shrike-setup.service`. If setup reports failures, it prints them and stops.
+    8.  On the first successful run, starts `shrike-backfill.service`.
     9.  Enables the timers. Nightly runs that start during the backfill exit 3 and still ping.
-    10. With `--phase 1`, enables and starts `search-kestrel.service`.
+    10. With `--phase 1`, enables and starts `shrike.service`.
 
 #### 34. `docs/SETUP.md` (Create) [P0]
 
@@ -1253,13 +1253,13 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 
 *   **Type / Scope**: Documentation
 *   **Proposed Changes**:
-    *   How to restore from a backup (stop the server and timers, download, unzip, swap the database file, run `sk-jobs setup`).
+    *   How to restore from a backup (stop the server and timers, download, unzip, swap the database file, run `shrike setup`).
     *   How to roll back a release, and how to read alert cards.
     *   What each exit code means.
     *   How to keep an Oracle Always Free VM from being reclaimed.
         *   Oracle may reclaim an Always Free instance when, over 7 days, its 95th-percentile CPU, network and (on A1 shapes) memory use all stay under 20%.
         *   Two ways to avoid it: upgrade the account to Pay As You Go, which keeps Always Free resources free and isn't subject to idle reclamation, or host the tool on the same VM as Kestrel's daily jobs.
-    *   How to re-run `sk-jobs render-units` and `systemctl daemon-reload` after a schedule change.
+    *   How to re-run `shrike render-units` and `systemctl daemon-reload` after a schedule change.
 
 #### 36. `tests/fakes.py` (Create) [P0]
 
@@ -1326,7 +1326,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   While `nightly` holds `writer.lock`, a `weekly` or `backfill` start exits with code 3.
     *   An interrupted backfill that has stored only 1 of a date's 3 dimension sets pulls the other 2 on resume.
     *   A truncated day alerts once across repeated nightly runs, and doesn't stop the dead-man ping.
-    *   `sk-jobs alert --unit X` posts one card naming X.
+    *   `shrike alert --unit X` posts one card naming X.
 
 #### 42. `tests/test_opps.py` (Create) [P1]
 
@@ -1383,7 +1383,7 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
     *   A missing API key returns 401 before any 404.
     *   `GET /v1/setup` makes no Trello, Drive or SQLite writes.
     *   The local MCP `tools/list` matches `routes.py`.
-    *   Remote MCP returns 404 for a wrong secret, and never lists `sk_run_job`.
+    *   Remote MCP returns 404 for a wrong secret, and never lists `shrike_run_job`.
     *   The request log never contains the MCP secret.
     *   A write attempted through the server's database connection fails.
 
@@ -1406,28 +1406,28 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 *   **Type / Scope**: CI configuration
 *   **Proposed Changes**: On every push and pull request, on Python 3.11 and 3.13, it:
     *   installs `requirements.txt` and `requirements-dev.txt`,
-    *   runs `ruff check sk tests`,
+    *   runs `ruff check shrike tests`,
     *   runs `coverage run -m unittest discover -s tests`,
-    *   runs `coverage report --fail-under=85 --include=sk/opps.py,sk/fixes.py,sk/gsc.py,sk/coverage.py,sk/backup.py`.
+    *   runs `coverage report --fail-under=85 --include=shrike/opps.py,shrike/fixes.py,shrike/gsc.py,shrike/coverage.py,shrike/backup.py`.
 
     It has no secrets and makes no network calls.
 
 ### Verification Plan
 
-*   **Compilation/Build**: `pip install -r requirements.txt && pip install -e .`, then `sk-jobs --help`, `sk-server --help` and `sk-mcp --help` all start without errors.
+*   **Compilation/Build**: `pip install -r requirements.txt && pip install -e .`, then `shrike --help`, `shrike-server --help` and `shrike-mcp --help` all start without errors.
 *   **Unit Tests**: `python -m unittest discover -s tests`. All tests pass with no network access.
-*   **Static Analysis & Linting**: `ruff check sk tests` reports no errors.
-*   **Test Coverage Requirement**: 85% or more line coverage on `sk/opps.py`, `sk/fixes.py`, `sk/gsc.py`, `sk/coverage.py` and `sk/backup.py`, measured with `coverage run -m unittest` in CI. These modules hold the logic that could quietly lose data or report wrong results.
+*   **Static Analysis & Linting**: `ruff check shrike tests` reports no errors.
+*   **Test Coverage Requirement**: 85% or more line coverage on `shrike/opps.py`, `shrike/fixes.py`, `shrike/gsc.py`, `shrike/coverage.py` and `shrike/backup.py`, measured with `coverage run -m unittest` in CI. These modules hold the logic that could quietly lose data or report wrong results.
 *   **E2E/Integration (live, run once by the author before Phase 1 is accepted)**:
-    1.  `sk-jobs setup` reports every check OK for both sites.
-    2.  `sk-backfill.service` finishes. `GET /v1/sites` then shows `missing_days = 0` for both sites.
-    3.  A manual `sk-jobs nightly` uploads a backup. `backup.verify_latest` then passes on it, and a manual restore to a second path opens with matching row counts.
-    4.  A manual `sk-jobs weekly` posts a summary card and 5 to 10 fix cards to the Trello board.
+    1.  `shrike setup` reports every check OK for both sites.
+    2.  `shrike-backfill.service` finishes. `GET /v1/sites` then shows `missing_days = 0` for both sites.
+    3.  A manual `shrike nightly` uploads a backup. `backup.verify_latest` then passes on it, and a manual restore to a second path opens with matching row counts.
+    4.  A manual `shrike weekly` posts a summary card and 5 to 10 fix cards to the Trello board.
     5.  Two failure tests:
         *   Revoke the Trello token and run nightly. The backup step still runs, the failure is written to the journal, no dead-man ping is sent, and the dead-man service emails within its window.
         *   Revoke the service account's Search Console access. With Trello working, this produces an alert card.
-    6.  Through the local stdio MCP, `sk_performance` for evogr, over the 28 days ending at `last_final_date`, returns a click total within 1% or 5 clicks (whichever is larger) of the Search Console web interface for the same dates.
-    7.  Add the remote connector in claude.ai (the tunnel URL with `/mcp/<secret>`), and call `sk_health`. It answers, and `sk_run_job` isn't listed.
+    6.  Through the local stdio MCP, `shrike_performance` for evogr, over the 28 days ending at `last_final_date`, returns a click total within 1% or 5 clicks (whichever is larger) of the Search Console web interface for the same dates.
+    7.  Add the remote connector in claude.ai (the tunnel URL with `/mcp/<secret>`), and call `shrike_health`. It answers, and `shrike_run_job` isn't listed.
 *   **Success metrics (tracked after launch)**:
     *   G2: 4 weeks in a row without opening Search Console by hand.
     *   G3: an average of 3 or more Done cards per week over the first 8 weeks.

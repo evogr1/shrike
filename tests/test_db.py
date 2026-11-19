@@ -2,7 +2,7 @@ import os
 import sqlite3
 import unittest
 
-from sk import coverage, db
+from shrike import coverage, db
 from tests.fakes import tmpdir
 
 

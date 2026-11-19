@@ -4,8 +4,8 @@ import os
 import threading
 import unittest
 
-from sk import backup, db
-from sk.errors import SkError
+from shrike import backup, db
+from shrike.errors import SkError
 from tests.fakes import FakeDrive, make_ctx, media_bytes, tmpdir
 
 UTC = dt.timezone.utc

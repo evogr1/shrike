@@ -1,4 +1,4 @@
--- Search Kestrel schema v1 (design doc, Contracts C2).
+-- Shrike schema v1 (design doc, Contracts C2).
 -- Dates are TEXT 'YYYY-MM-DD' (Search Console dates, US Pacific).
 -- Timestamps are TEXT ISO 8601 UTC.
 

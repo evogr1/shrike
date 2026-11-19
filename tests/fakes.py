@@ -6,9 +6,9 @@ import os
 import tempfile
 import textwrap
 
-from sk import db, gsc
-from sk.config import load_config
-from sk.health import JobContext
+from shrike import db, gsc
+from shrike.config import load_config
+from shrike.health import JobContext
 
 
 class FakeHttpError(Exception):
@@ -85,7 +85,7 @@ class FakeTrello:
 
     def _maybe_fail(self):
         if self.fail:
-            from sk.errors import AuthError
+            from shrike.errors import AuthError
 
             raise AuthError("Trello refused the key or token", "new token")
 
@@ -217,7 +217,7 @@ def make_ctx(tmp, trello=None, gsc_client=None, **cfg_over):
 
 
 def tmpdir():
-    return tempfile.mkdtemp(prefix="sk-test-")
+    return tempfile.mkdtemp(prefix="shrike-test-")
 
 
 gsc._sleep = lambda s: None  # no real sleeping in tests

@@ -78,7 +78,7 @@ def step(ctx, name):
         msg = scrub(str(exc) or repr(exc))
         ctx.conn.execute("UPDATE runs SET status = 'error', finished_at = ?, error = ? WHERE id = ?",
                          (db.utcnow(), msg[:2000], row_id))
-        fix = getattr(exc, "fix_step", None) or "check the journal: journalctl -u sk-" + ctx.job
+        fix = getattr(exc, "fix_step", None) or "check the journal: journalctl -u shrike-" + ctx.job
         if isinstance(exc, AuthError):
             alert(ctx, "auth", name, msg, fix)
         elif isinstance(exc, QuotaError):
@@ -104,7 +104,7 @@ def alert(ctx, kind, subject, message, fix_step, once=False):
         event_id = cur.lastrowid
     else:
         event_id = row["id"]
-    title = f"[Search Kestrel] {kind}: {subject}"
+    title = f"[Shrike] {kind}: {subject}"
     desc = f"{message}\n\nFix: {fix_step or 'see docs/OPERATIONS.md'}\n\n({db.utcnow()})"
     try:
         if ctx.trello is None or not ctx.cfg.trello_alert_list_id:
@@ -152,7 +152,7 @@ def checks(ctx, now=None):
             out.append(Problem("expiry_warning", s.name,
                                f"{s.name} {om} is missing and expires from Search Console within "
                                f"{cfg.expiry_warn_days} days",
-                               "run the backfill now: systemctl start sk-backfill.service"))
+                               "run the backfill now: systemctl start shrike-backfill.service"))
     last_backup = conn.execute("SELECT MAX(finished_at) FROM runs WHERE step = 'backup' AND status = 'ok'").fetchone()[0]
     first_run = conn.execute("SELECT MIN(started_at) FROM runs WHERE step IS NULL").fetchone()[0]
     ref = last_backup or first_run
@@ -166,7 +166,7 @@ def checks(ctx, now=None):
         anchor = max([x for x in (last_weekly, db.meta_get(conn, "phase1_seen_at")) if x], default=None)
         if anchor and _hours_since(anchor, now) > cfg.weekly_max_days * 24:
             out.append(Problem("weekly_missing", "weekly", f"no successful weekly run in {cfg.weekly_max_days} days",
-                               "check: systemctl status sk-weekly.timer sk-weekly.service"))
+                               "check: systemctl status shrike-weekly.timer shrike-weekly.service"))
     return out
 
 

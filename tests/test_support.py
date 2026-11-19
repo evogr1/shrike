@@ -2,8 +2,8 @@ import datetime as dt
 import unittest
 from unittest import mock
 
-from sk import baseline, db, health, setup_check, trello
-from sk.errors import AuthError
+from shrike import baseline, db, health, setup_check, trello
+from shrike.errors import AuthError
 from tests.fakes import FakeDrive, FakeSearchConsole, FakeTrello, make_ctx, make_data, media_bytes, tmpdir
 
 UTC = dt.timezone.utc
@@ -119,7 +119,7 @@ class SetupCheckTest(unittest.TestCase):
         ctx = make_ctx(tmpdir(), trello=tr, target="gdrive", dead_man_url="https://hc.example/x")
         gscc = FakeSearchConsole(dt.date(2026, 3, 10), make_data("sc-domain:ex.com", dt.date(2026, 3, 1),
                                                                   dt.date(2026, 3, 12)))
-        from sk import backup
+        from shrike import backup
         target = backup.DriveTarget(FakeDrive(), "fold", media_factory=media_bytes)
         checks = setup_check.full_report(ctx, gsc_client=gscc, drive_target=target)
         bad = [c for c in checks if not c.ok]

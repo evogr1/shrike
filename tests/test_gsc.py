@@ -1,8 +1,8 @@
 import datetime as dt
 import unittest
 
-from sk import gsc
-from sk.errors import AuthError, QuotaError
+from shrike import gsc
+from shrike.errors import AuthError, QuotaError
 from tests.fakes import FakeHttpError, FakeSearchConsole, make_data
 
 P = "sc-domain:ex.com"

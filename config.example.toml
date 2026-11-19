@@ -1,10 +1,10 @@
-# Search Kestrel config. Copy to /etc/search-kestrel/config.toml (root:sk, 640).
-# Secrets do NOT go here; they go in /etc/search-kestrel/env.
+# Shrike config. Copy to /etc/shrike/config.toml (root:shrike, 640).
+# Secrets do NOT go here; they go in /etc/shrike/env.
 
 [general]
 phase = 0                       # 0 = capture only. Set to 1 once Phase 1 is installed.
 timezone = "Europe/Amsterdam"   # used for schedules, backup retention days and alert days
-data_dir = "/var/lib/search-kestrel"
+data_dir = "/var/lib/shrike"
 dead_man_url = ""               # required for G5, e.g. a healthchecks.io ping URL (26 h period)
 
 [[sites]]
@@ -37,7 +37,7 @@ alert_list_id = ""              # Phase 0: alert cards
 [backup]
 target = "gdrive"               # "gdrive" (Google Shared Drive) or "local" (G1 not met)
 gdrive_folder_id = ""
-local_path = "/var/lib/search-kestrel/backups"
+local_path = "/var/lib/shrike/backups"
 keep_daily = 30
 keep_monthly = 12
 

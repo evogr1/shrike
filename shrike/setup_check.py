@@ -45,7 +45,7 @@ def full_report(ctx, gsc_client=None, drive_target=None):
             client = make()
         except Exception as e:
             out.append(Check("service account", False, f"could not load the key: {e!r}"[:300],
-                             "check SK_SERVICE_ACCOUNT_FILE; if the key can't be created, see docs/SETUP.md "
+                             "check SHRIKE_SERVICE_ACCOUNT_FILE; if the key can't be created, see docs/SETUP.md "
                              "(iam.disableServiceAccountKeyCreation)", checked_at=db.utcnow()))
     if client is not None:
         from .jobs import _auth_fix
@@ -66,8 +66,8 @@ def full_report(ctx, gsc_client=None, drive_target=None):
             if not lst:
                 return False, f"Trello list {lid} ({label}) not found", f"check trello.{label}_list_id"
             names.append(f"{label}={lst.get('name', lid)}")
-        cid = ctx.trello.create_card(cfg.trello_alert_list_id, "[Search Kestrel] setup test (safe to ignore)",
-                                     "Posted and deleted by sk-jobs setup.")
+        cid = ctx.trello.create_card(cfg.trello_alert_list_id, "[Shrike] setup test (safe to ignore)",
+                                     "Posted and deleted by shrike setup.")
         ctx.trello.delete_card(cid)
         return True, "lists readable and alert path works (" + ", ".join(names) + ")", None
     out.append(_check("trello", trello_lists))
@@ -101,4 +101,4 @@ def readonly_report(cfg, data_dir):
         with open(path) as f:
             return json.load(f)
     except FileNotFoundError:
-        return {"saved_at": None, "checks": [], "note": "run sk-jobs setup"}
+        return {"saved_at": None, "checks": [], "note": "run shrike setup"}

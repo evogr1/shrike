@@ -2,13 +2,13 @@
 
 ## Reading alert cards
 
-Each card is titled `[Search Kestrel] <kind>: <subject>` and ends with a one-line fix.
+Each card is titled `[Shrike] <kind>: <subject>` and ends with a one-line fix.
 
 | Kind | Meaning |
 |---|---|
 | `auth` | Google or Trello refused the credentials. Follow the fix line. |
 | `quota` | Rate limit after retries. Usually clears by the next night. |
-| `step_failed` | A step failed for another reason. Check `journalctl -u sk-nightly -n 100`. |
+| `step_failed` | A step failed for another reason. Check `journalctl -u shrike-nightly -n 100`. |
 | `gap` | Days older than 3 days are still missing. Usually follows another alert. |
 | `expiry_warning` | A missing day expires from Search Console within 14 days. Run the backfill now. |
 | `expired` | A day expired before it was saved. Can't be recovered. Sent once. |
@@ -21,15 +21,15 @@ Same condition, same day: one card. If Trello itself fails, the alert goes to th
 ## Common commands
 
 ```bash
-systemctl start sk-setup && journalctl -u sk-setup -n 40 -o cat   # re-run the setup check
-systemctl start sk-backfill                                       # fill missing days now
-systemctl list-timers 'sk-*'
-journalctl -u sk-nightly -n 100
+systemctl start shrike-setup && journalctl -u shrike-setup -n 40 -o cat   # re-run the setup check
+systemctl start shrike-backfill                                       # fill missing days now
+systemctl list-timers 'shrike-*'
+journalctl -u shrike-nightly -n 100
 ```
 
-Exit codes: 0 ok, 10 a step failed (already alerted), 3 another job is running (nightly still pings in that case), 2 config error. Codes 0, 10 and 3 count as success for systemd; anything else, including 1 from a crash, fails the unit and triggers `sk-alert@`.
+Exit codes: 0 ok, 10 a step failed (already alerted), 3 another job is running (nightly still pings in that case), 2 config error. Codes 0, 10 and 3 count as success for systemd; anything else, including 1 from a crash, fails the unit and triggers `shrike-alert@`.
 
-A config error can't post its own alert, because `sk-alert@` reads the same broken config. The dead-man check covers that case: the nightly ping stops and healthchecks.io emails you.
+A config error can't post its own alert, because `shrike-alert@` reads the same broken config. The dead-man check covers that case: the nightly ping stops and healthchecks.io emails you.
 
 Time limits (`TimeoutStartSec=`, since the jobs are oneshot units): backfill 12 h, nightly and setup 2 h. A job killed at its limit fails with result `timeout`, releases the lock and posts a `unit_failed` card.
 
@@ -38,24 +38,24 @@ Time limits (`TimeoutStartSec=`, since the jobs are oneshot units): backfill 12 
 Edit `[schedule]` or `general.timezone` in `config.toml`, then:
 
 ```bash
-sudo -u sk SK_CONFIG=/etc/search-kestrel/config.toml /opt/search-kestrel/venv/bin/sk-jobs render-units --out /tmp/sk-units
-sudo cp /tmp/sk-units/*.timer /etc/systemd/system/ && sudo systemctl daemon-reload
+sudo -u shrike SHRIKE_CONFIG=/etc/shrike/config.toml /opt/shrike/venv/bin/shrike render-units --out /tmp/shrike-units
+sudo cp /tmp/shrike-units/*.timer /etc/systemd/system/ && sudo systemctl daemon-reload
 ```
 
 (or just re-run `install.sh`).
 
 ## Restoring from a backup
 
-1. `sudo systemctl stop sk-nightly.timer`
-2. Download the newest `sk-YYYYMMDDTHHMMZ.sqlite.gz` from the Shared Drive folder.
-3. `gunzip -c sk-....sqlite.gz > /tmp/data.sqlite && sqlite3 /tmp/data.sqlite 'PRAGMA integrity_check'`
-4. `sudo install -o sk -g sk -m 600 /tmp/data.sqlite /var/lib/search-kestrel/data.sqlite && sudo rm -f /var/lib/search-kestrel/data.sqlite-wal /var/lib/search-kestrel/data.sqlite-shm`
-5. `sudo systemctl start sk-setup sk-backfill` (the backfill re-pulls anything newer than the backup that Google still has)
-6. `sudo systemctl start sk-nightly.timer`
+1. `sudo systemctl stop shrike-nightly.timer`
+2. Download the newest `shrike-YYYYMMDDTHHMMZ.sqlite.gz` from the Shared Drive folder.
+3. `gunzip -c shrike-....sqlite.gz > /tmp/data.sqlite && sqlite3 /tmp/data.sqlite 'PRAGMA integrity_check'`
+4. `sudo install -o shrike -g shrike -m 600 /tmp/data.sqlite /var/lib/shrike/data.sqlite && sudo rm -f /var/lib/shrike/data.sqlite-wal /var/lib/shrike/data.sqlite-shm`
+5. `sudo systemctl start shrike-setup shrike-backfill` (the backfill re-pulls anything newer than the backup that Google still has)
+6. `sudo systemctl start shrike-nightly.timer`
 
 ## Upgrading and rolling back
 
-`git -C /opt/search-kestrel pull && sudo /opt/search-kestrel/deploy/install.sh`. The first job after an upgrade takes a `pre-migrate-<version>.sqlite` snapshot in the data directory before migrating (the 3 newest are kept). To roll back: check out the previous release, re-run `install.sh`, and restore that snapshot as above.
+`git -C /opt/shrike pull && sudo /opt/shrike/deploy/install.sh`. The first job after an upgrade takes a `pre-migrate-<version>.sqlite` snapshot in the data directory before migrating (the 3 newest are kept). To roll back: check out the previous release, re-run `install.sh`, and restore that snapshot as above.
 
 ## Keeping an Oracle Always Free VM
 

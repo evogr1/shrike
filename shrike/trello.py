@@ -44,7 +44,7 @@ class Trello:
                 _sleep(float(r.headers.get("Retry-After", 10)))
                 continue
             if r.status_code in (401, 403):
-                raise AuthError("Trello refused the key or token", "create a new token and update SK_TRELLO_TOKEN")
+                raise AuthError("Trello refused the key or token", "create a new token and update SHRIKE_TRELLO_TOKEN")
             if r.status_code == 404:
                 return None
             if r.status_code >= 400:
