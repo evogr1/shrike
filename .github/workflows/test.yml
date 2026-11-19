@@ -1,0 +1,17 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - run: ruff check sk tests
+      - run: coverage run -m unittest discover -s tests -t .
+      - run: coverage report --fail-under=85 --include=sk/gsc.py,sk/coverage.py,sk/backup.py,sk/db.py,sk/health.py

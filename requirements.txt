@@ -1,0 +1,4 @@
+# Runtime dependencies. Pinned exactly; update deliberately.
+google-auth==2.62.2               # service-account login and token refresh
+google-api-python-client==2.202.0 # Search Console and Drive API clients
+requests==2.34.2                  # Trello REST API

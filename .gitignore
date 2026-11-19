@@ -1,0 +1,16 @@
+config.toml
+.env
+env
+*.json
+!tests/fixtures/*.json
+*.sqlite
+*.sqlite-*
+*.sqlite.gz
+venv/
+.venv/
+__pycache__/
+*.egg-info/
+.coverage
+htmlcov/
+build/
+.ruff_cache/

@@ -1,0 +1,45 @@
+# Search Kestrel config. Copy to /etc/search-kestrel/config.toml (root:sk, 640).
+# Secrets do NOT go here; they go in /etc/search-kestrel/env.
+
+[general]
+phase = 0                       # 0 = capture only. Set to 1 once Phase 1 is installed.
+timezone = "Europe/Amsterdam"   # used for schedules, backup retention days and alert days
+data_dir = "/var/lib/search-kestrel"
+dead_man_url = ""               # required for G5, e.g. a healthchecks.io ping URL (26 h period)
+
+[[sites]]
+name = "evogr"                  # short name used in alerts and MCP calls
+property = "sc-domain:evogr.net"
+
+[[sites]]
+name = "solodac"
+property = "https://solodac.com/"
+
+[schedule]
+nightly = "03:30"
+weekly = "Mon 07:00"
+
+[pull]
+pull_pause_seconds = 0.5
+
+[health]
+gap_days = 3
+expiry_warn_days = 14
+backup_max_hours = 48
+weekly_max_days = 8
+
+[trello]
+board_id = ""
+inbox_list_id = ""              # Phase 1: new brief cards
+done_list_id = ""               # Phase 1: shipped fixes
+alert_list_id = ""              # Phase 0: alert cards
+
+[backup]
+target = "gdrive"               # "gdrive" (Google Shared Drive) or "local" (G1 not met)
+gdrive_folder_id = ""
+local_path = "/var/lib/search-kestrel/backups"
+keep_daily = 30
+keep_monthly = 12
+
+[phase3]
+monthly_cap_usd = 0             # 0 keeps paid AI engines off. Unused until Phase 3.

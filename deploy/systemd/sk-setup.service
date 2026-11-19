@@ -1,0 +1,21 @@
+[Unit]
+Description=Search Kestrel setup check
+After=network-online.target
+Wants=network-online.target
+
+
+[Service]
+Type=oneshot
+ExecStart=/opt/search-kestrel/venv/bin/sk-jobs setup
+User=sk
+Group=sk
+EnvironmentFile=/etc/search-kestrel/env
+Environment=SK_ENV_FILE=/etc/search-kestrel/env
+Environment=SK_CONFIG=/etc/search-kestrel/config.toml
+StateDirectory=search-kestrel
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+TimeoutStartSec=2h
