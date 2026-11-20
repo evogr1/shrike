@@ -21,9 +21,9 @@ class BackupTest(unittest.TestCase):
 
     def test_snapshot_during_writes_restores_intact(self):
         stop = threading.Event()
-        wconn = db.connect(self.ctx.cfg.db_path)
 
         def writer():
+            wconn = db.connect(self.ctx.cfg.db_path)
             i = 0
             while not stop.is_set():
                 wconn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES (?, 'x')", (f"k{i}",))

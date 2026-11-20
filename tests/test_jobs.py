@@ -84,14 +84,28 @@ class JobsTest(unittest.TestCase):
     def test_final_but_empty_is_deferred_and_retried(self):
         self.ctx.gsc.final_empty.add((P, NEWEST.isoformat()))
         jobs.do_backfill(self.ctx, self.target)
-        self.assertEqual(self.pulled(NEWEST.isoformat()), [])
-        errs = self.ctx.conn.execute("SELECT COUNT(*) FROM pulls WHERE status='error' AND error='final data not ready'"
-                                     ).fetchone()[0]
-        self.assertEqual(errs, 3)
+        self.assertEqual(sorted(r["dims"] for r in self.pulled(NEWEST.isoformat())), ["page", "page_query"])
+        errs = self.ctx.conn.execute("SELECT dims FROM pulls WHERE status='error' AND error='final data not ready'").fetchall()
+        self.assertEqual([r["dims"] for r in errs], ["site"])  # page dims are not guarded
         self.ctx.gsc.final_empty.clear()
         health.start_job(self.ctx, "nightly")
         jobs.do_nightly(self.ctx, self.target)
         self.assertEqual(len(self.pulled(NEWEST.isoformat())), 3)
+
+    def test_empty_page_query_with_traffic_is_final(self):
+        # Low-traffic day: site totals exist, but Google returns no page+query rows (hidden queries).
+        orig = self.ctx.gsc.execute
+
+        def no_pq():
+            prop, body = self.ctx.gsc._req
+            if body["dimensions"] == ["page", "query"]:
+                self.ctx.gsc.calls.append((prop, dict(body)))
+                return {}
+            return orig()
+        self.ctx.gsc.execute = no_pq
+        jobs.do_backfill(self.ctx, self.target)
+        self.assertEqual(len(self.pulled(NEWEST.isoformat())), 3)
+        self.assertEqual(self.ctx.conn.execute("SELECT COUNT(*) FROM pulls WHERE status='error'").fetchone()[0], 0)
 
     def test_trello_failure_still_runs_backup_and_stops_ping(self):
         jobs.do_backfill(self.ctx, self.target)

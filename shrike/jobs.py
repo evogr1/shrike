@@ -67,8 +67,10 @@ def pull_site(ctx, site, oldest, recent):
             failed += 1
             first_error = first_error or exc
             continue
-        if not rows and recent.get(date, 0) > 0:
-            # Final data returned nothing while the 'all' probe shows impressions: not ready yet (C4).
+        if dims == "site" and not rows and recent.get(date, 0) > 0:
+            # Final site totals are empty while the 'all' probe shows impressions: not ready yet (C4).
+            # Only site totals are checked: page and page+query rows can be legitimately empty on
+            # low-traffic days because Google hides rare queries.
             db.record_failed_pull(ctx.conn, site.name, date, dims, "final data not ready", started)
             deferred += 1
             continue
