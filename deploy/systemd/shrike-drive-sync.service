@@ -1,0 +1,15 @@
+# Optional: copy local backups to Google Drive with rclone (for hosts that already have an
+# rclone "gdrive:" remote). Use with backup.target = "local". Edit User=, ExecStart= and the
+# Drive folder for your host. The sync user must be in the shrike group to read the backups.
+[Unit]
+Description=Shrike: copy backups to Google Drive (rclone, verified)
+After=network-online.target
+Wants=network-online.target
+OnFailure=shrike-alert@%n.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/bin/gdsave /var/lib/shrike/backups shrike
+TimeoutStartSec=1h
+Nice=10

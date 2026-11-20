@@ -22,7 +22,16 @@ For each site: Search Console → Settings → Users and permissions → Add use
 
 Create a folder in a **Shared Drive** (a plain "My Drive" folder will not work: service accounts have no storage of their own). Share it with the service account as **Content Manager**, not Manager, so it can't permanently delete backups. Copy the folder id from its URL into `backup.gdrive_folder_id`.
 
-No Workspace? Set `backup.target = "local"`. Backups then stay on the VM, which doesn't protect you if the VM is lost (the setup check and alerts say "G1 not met"). Copy `/var/lib/shrike/backups` elsewhere yourself.
+**Already have rclone with a Google Drive remote on the server?** You can skip the Shared Drive. Set `backup.target = "local"` (backups go to `/var/lib/shrike/backups`), add your sync user to the `shrike` group (`sudo usermod -aG shrike ubuntu`), edit `deploy/systemd/shrike-drive-sync.service` for your user and Drive folder, then copy and enable it with its timer:
+
+```bash
+sudo install -m 644 /opt/shrike/deploy/systemd/shrike-drive-sync.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now shrike-drive-sync.timer
+```
+
+It copies the backups to Drive every morning and verifies them with `rclone check`. The setup check still shows "G1 not met" for local mode, because it can't see the rclone copy; check the Drive folder once by hand.
+
+No Workspace and no rclone? Set `backup.target = "local"`. Backups then stay on the VM, which doesn't protect you if the VM is lost (the setup check and alerts say "G1 not met"). Copy `/var/lib/shrike/backups` elsewhere yourself.
 
 ## 4. Trello
 

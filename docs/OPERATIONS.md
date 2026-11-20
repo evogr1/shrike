@@ -44,6 +44,10 @@ sudo cp /tmp/shrike-units/*.timer /etc/systemd/system/ && sudo systemctl daemon-
 
 (or just re-run `install.sh`).
 
+## rclone Drive copy (optional)
+
+If you use `shrike-drive-sync.timer`, check it with `systemctl status shrike-drive-sync` and `journalctl -u shrike-drive-sync -n 20`. A failed or unverified copy posts a `unit_failed` card.
+
 ## Restoring from a backup
 
 1. `sudo systemctl stop shrike-nightly.timer`
