@@ -2,15 +2,14 @@
 
 A free, self-hosted tool that keeps a permanent copy of your Google Search Console data and tells you when something breaks. It's the search counterpart to [Kestrel](https://github.com/evogr1/kestrel).
 
-**This release is Phase 0 (data capture).** It:
+**It does:**
 
-- backfills all the Search Console history Google still has (about 16 months), oldest day first, so nothing expires before it's saved,
-- pulls each newly final day every night: site totals, pages, and page + query,
-- keeps it in SQLite, append-only, with a frozen 28-day baseline per site,
-- backs the database up every night to a Google Shared Drive folder (or a local folder),
-- posts a Trello card when a login, quota, pull, gap or backup fails, and pings a dead-man check (such as healthchecks.io) so you get an email if the server itself goes quiet.
+- keeps a permanent, backed-up copy of your Search Console data (backfill, nightly pull, frozen baseline, alerts),
+- posts a weekly Trello brief of fixes: queries you almost rank for, pages with low click-through, and pages losing clicks,
+- measures each fix you move to Done against similar untouched pages, in extra clicks per 28 days,
+- serves a read-only HTTP API and MCP tools, so you can ask Claude about your traffic.
 
-Phase 1 (opportunity lists, a weekly Trello brief of fixes, fix tracking, and an HTTP API plus MCP tools) comes next. The full design is in [docs/design.md](docs/design.md).
+Phase 0 is capture only; Phase 1 (brief, fix tracking, API, MCP) is turned on with `install.sh --phase 1`. Page audits, Bing data and AI citation tracking are not built yet.
 
 ## Cost
 

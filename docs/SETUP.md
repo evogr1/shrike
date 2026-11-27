@@ -62,3 +62,18 @@ sudo /opt/shrike/deploy/install.sh
 ```
 
 It renders the timers from your schedule, runs the setup check (every line should say `ok`; warnings are allowed), starts the backfill once, and enables the nightly timer. Follow the backfill with `journalctl -fu shrike-backfill`.
+
+## 8. Phase 1: weekly brief, API and MCP
+
+1. In Trello add two lists, "Fix brief" and "Done", and put their ids in `trello.inbox_list_id` and `trello.done_list_id`.
+2. In `config.toml` set `general.phase = 1`. Small site? Lower `sd_min_impr`, `lowctr_min_impr` and `decay_min_clicks` under `[opportunities]`, then preview without sending anything:
+
+   ```bash
+   sudo -u shrike SHRIKE_CONFIG=/etc/shrike/config.toml /opt/shrike/venv/bin/shrike weekly --dry-run
+   ```
+3. Add `SHRIKE_API_KEY` (`openssl rand -hex 24`) to `/etc/shrike/env`. For remote MCP also add `SHRIKE_MCP_SECRET`.
+4. `sudo /opt/shrike/deploy/install.sh --phase 1`
+
+**Local MCP** (your laptop): `ssh -N -L 8899:127.0.0.1:8899 your-server`, then add `shrike-mcp` to your MCP client with `SHRIKE_API_KEY` set.
+
+**Remote MCP** (optional): expose only `/mcp/` through a Cloudflare Tunnel to `127.0.0.1:8899`, and add `https://your-host/mcp/<secret>` as a connector. Don't put Cloudflare Access in front of that path.

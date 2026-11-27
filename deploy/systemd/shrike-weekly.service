@@ -1,0 +1,22 @@
+[Unit]
+Description=Shrike weekly fix brief
+After=network-online.target
+Wants=network-online.target
+OnFailure=shrike-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/shrike/venv/bin/shrike weekly
+User=shrike
+Group=shrike
+EnvironmentFile=/etc/shrike/env
+Environment=SHRIKE_ENV_FILE=/etc/shrike/env
+Environment=SHRIKE_CONFIG=/etc/shrike/config.toml
+StateDirectory=shrike
+StateDirectoryMode=0750
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+SuccessExitStatus=10 3
+TimeoutStartSec=2h

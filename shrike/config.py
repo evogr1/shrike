@@ -9,6 +9,30 @@ from .errors import ConfigError
 
 DEFAULT_CONFIG = "/etc/shrike/config.toml"
 
+OPP_DEFAULTS = {
+    "sd_min_pos": 5, "sd_max_pos": 20, "sd_min_impr": 100, "lowctr_min_impr": 500, "lowctr_ratio": 0.5,
+    "decay_drop": 0.30, "decay_min_clicks": 50, "bands": [[1, 1], [2, 2], [3, 3], [4, 5], [6, 10], [11, 20]],
+    "expected_ctr_days": 90, "expected_ctr_min_impr": 10, "min_band_pairs": 5,
+    # Used only when the site has fewer than min_band_pairs queries in a band (one value per band).
+    "fallback_ctr": [0.25, 0.12, 0.08, 0.05, 0.02, 0.008],
+    "max_per_type": 4, "brief_min": 5, "brief_max": 10, "expire_after_weeks": 3, "resend_after_weeks": 8,
+}
+FIX_DEFAULTS = {"window_days": 28, "exclusion_before_days": 56, "min_comparison_pages": 10,
+                "min_before_impressions": 100}
+
+
+def _section(raw, name, defaults):
+    out = dict(defaults)
+    for k, v in raw.get(name, {}).items():
+        if k not in defaults:
+            raise ConfigError(f"{name}.{k} is not a known setting", f"remove {name}.{k} from config.toml")
+        want = type(defaults[k])
+        ok = isinstance(v, (int, float)) if want is float else isinstance(v, want)
+        if not ok or isinstance(v, bool):
+            raise ConfigError(f"{name}.{k} must be {want.__name__}", f"fix {name}.{k} in config.toml")
+        out[k] = v
+    return out
+
 
 @dataclass(frozen=True)
 class Site:
@@ -41,6 +65,10 @@ class Config:
     keep_monthly: int
     monthly_cap_usd: float = 0.0
     path: str = ""
+    opp: dict = field(default_factory=lambda: dict(OPP_DEFAULTS))
+    fix: dict = field(default_factory=lambda: dict(FIX_DEFAULTS))
+    server_host: str = "127.0.0.1"
+    server_port: int = 8899
 
     @property
     def db_path(self):
@@ -156,6 +184,10 @@ def load_config(path=None):
         keep_monthly=_get(b, "keep_monthly", int, 12, where="backup."),
         monthly_cap_usd=_get(p3, "monthly_cap_usd", float, 0.0, where="phase3."),
         path=path,
+        opp=_section(raw, "opportunities", OPP_DEFAULTS),
+        fix=_section(raw, "fixes", FIX_DEFAULTS),
+        server_host=_get(raw.get("server", {}), "host", str, "127.0.0.1", where="server."),
+        server_port=_get(raw.get("server", {}), "port", int, 8899, where="server."),
     )
 
 

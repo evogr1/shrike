@@ -64,3 +64,7 @@ If you use `shrike-drive-sync.timer`, check it with `systemctl status shrike-dri
 ## Keeping an Oracle Always Free VM
 
 Oracle may reclaim an Always Free instance that is idle for 7 days (95th-percentile CPU, network and, on A1 shapes, memory all under 20%). This tool is light, so either upgrade the account to Pay As You Go (Always Free resources stay free and aren't reclaimed for idleness) or run it on the same VM as other daily work, such as Kestrel.
+
+## The weekly brief
+
+Move a fix card to **Done** when it ships (add `shipped: YYYY-MM-DD` to the card if it went live another day). Close a card to dismiss it. `shrike weekly --dry-run` previews the brief. Where a site has too little data for its own click-through rates, cards say they use "a generic benchmark" (`fallback_ctr` in the config).

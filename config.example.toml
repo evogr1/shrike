@@ -43,3 +43,20 @@ keep_monthly = 12
 
 [phase3]
 monthly_cap_usd = 0             # 0 keeps paid AI engines off. Unused until Phase 3.
+
+# ---- Phase 1 ----
+[opportunities]                 # small sites: lower the three minimums or the brief stays empty
+sd_min_impr = 100               # striking distance: impressions in 28 days, position 5-20
+lowctr_min_impr = 500           # low CTR: impressions in 28 days
+decay_min_clicks = 50           # decaying: clicks in the previous 28 days
+max_per_type = 4
+brief_max = 10
+
+[fixes]
+window_days = 28
+min_comparison_pages = 10
+min_before_impressions = 100
+
+[server]
+host = "127.0.0.1"
+port = 8899

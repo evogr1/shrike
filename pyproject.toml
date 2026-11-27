@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shrike"
-version = "0.1.0"
+version = "0.2.0"
 description = "Free, self-hosted Search Console history, opportunities and weekly fix briefs."
 readme = "README.md"
 license = "MIT"
@@ -17,6 +17,8 @@ dependencies = [
 
 [project.scripts]
 shrike = "shrike.jobs:main"
+shrike-server = "shrike.server:main"
+shrike-mcp = "shrike.mcp_stdio:main"
 
 [tool.setuptools]
 packages = ["shrike", "shrike.migrations"]

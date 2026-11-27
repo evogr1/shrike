@@ -1,12 +1,14 @@
 """shrike: the Phase 0 command line (backfill, nightly, setup, alert, render-units)."""
 
 import argparse
+import datetime as dt
 import fcntl
 import json
 import os
 import sys
+from zoneinfo import ZoneInfo
 
-from . import backup, baseline, coverage, db, gsc, health, setup_check
+from . import backup, baseline, brief, coverage, db, fixes, gsc, health, opps, setup_check, templates
 from .config import load_config, load_secrets
 from .errors import AuthError, ConfigError, QuotaError, SkError
 from .health import JobContext
@@ -115,7 +117,7 @@ def do_nightly(ctx, target):
     ok &= s.ok
     if ctx.cfg.phase >= 1:
         with health.step(ctx, "trello_sync") as s:
-            raise SkError("Phase 1 (Trello sync) is not in this release", "set general.phase = 0 until Phase 1 ships")
+            fixes.sync_from_trello(ctx.conn, ctx.trello, ctx.cfg)
         ok &= s.ok
     with health.step(ctx, "checks") as s:
         health.run_checks(ctx)
@@ -123,6 +125,53 @@ def do_nightly(ctx, target):
     if health.undelivered(ctx) == 0:
         health.ping_dead_man(ctx.cfg.dead_man_url)
     return ok
+
+
+def do_weekly(ctx, target):
+    run_id, now = ctx.job_run_id, dt.datetime.now(ZoneInfo(ctx.cfg.timezone))
+    ok = True
+    with health.step(ctx, "opportunities") as s:
+        found = []
+        for site in ctx.cfg.sites:
+            _, last = db.get_range(ctx.conn, site.name)
+            if last:
+                found += opps.find(ctx.conn, site.name, ctx.cfg, last)
+        opps.upsert(ctx.conn, ctx.cfg, found, ctx.trello, run_id)
+    ok &= s.ok
+    with health.step(ctx, "refresh_cards") as s:
+        opps.refresh_open_cards(ctx.conn, ctx.trello, run_id)
+    ok &= s.ok
+    measured = []
+    with health.step(ctx, "measure") as s:
+        measured = fixes.measure_due(ctx.conn, ctx.cfg)
+    ok &= s.ok
+    with health.step(ctx, "brief") as s:
+        selected = opps.select_for_brief(ctx.conn, ctx.cfg, run_id)
+        content = brief.build(ctx.conn, ctx.cfg, selected, measured)
+        brief.send(ctx.conn, ctx.cfg, ctx.trello, content, now.date().isoformat())
+    ok &= s.ok
+    if now.day <= 7:
+        with health.step(ctx, "verify_backup") as s:
+            backup.verify_latest(ctx.conn, ctx.cfg, target())
+        ok &= s.ok
+    return ok
+
+
+def preview(cfg, db_path):
+    """Print what the weekly brief would contain. Reads only; sends and stores nothing."""
+    conn = db.connect_ro(db_path)
+    found = []
+    for site in cfg.sites:
+        _, last = db.get_range(conn, site.name)
+        if last:
+            found += opps.find(conn, site.name, cfg, last)
+    selected = opps.choose(found, cfg.opp)
+    title, text = brief.render_summary(cfg, brief.build(conn, cfg, selected, []), "preview")
+    print(f"{title}\n{text}\n\n{len(found)} opportunities passed the thresholds.")
+    for o in selected:
+        card_title, desc = templates.render_card(o)
+        print(f"\n== {card_title}\n" + desc.split("\n\nWhy:")[0])
+    return len(found)
 
 
 # ---------------------------------------------------------------- render-units
@@ -170,7 +219,8 @@ def main(argv=None):
     b = sub.add_parser("backfill")
     b.add_argument("--site")
     sub.add_parser("nightly")
-    sub.add_parser("weekly")
+    w = sub.add_parser("weekly")
+    w.add_argument("--dry-run", action="store_true")
     sub.add_parser("setup")
     a = sub.add_parser("alert")
     a.add_argument("--unit", required=True)
@@ -183,6 +233,9 @@ def main(argv=None):
         if args.cmd == "render-units":
             for p in render_units(cfg, args.out):
                 print(p)
+            return EXIT_OK
+        if args.cmd == "weekly" and args.dry_run:
+            preview(cfg, cfg.db_path)
             return EXIT_OK
         secrets = load_secrets("alert" if args.cmd == "alert" else "jobs")
     except ConfigError as e:
@@ -197,11 +250,8 @@ def main(argv=None):
                      f"run: journalctl -u {args.unit} -n 100, and see docs/OPERATIONS.md")
         return EXIT_OK
 
-    if args.cmd == "weekly":
-        if cfg.phase == 0:
-            print("Phase 1 not enabled (general.phase = 0)", file=sys.stderr)
-        else:
-            print("Phase 1 (weekly brief) is not in this release", file=sys.stderr)
+    if args.cmd == "weekly" and cfg.phase == 0:
+        print("Phase 1 not enabled (general.phase = 0)", file=sys.stderr)
         return EXIT_CONFIG
 
     try:
@@ -225,13 +275,18 @@ def main(argv=None):
                 print(f"[{'ok' if c.ok else 'FAIL'}] {c.name}: {c.detail}" + ("" if c.ok else f"\n       fix: {c.fix_step}"))
             return EXIT_OK if all(c.ok or c.warning for c in checks) else EXIT_STEP_FAILED
 
-        ctx = _make_ctx(cfg, secrets)
+        ctx = _make_ctx(cfg, secrets, need_gsc=args.cmd != "weekly")
         health.start_job(ctx, args.cmd)
 
         def target():
             return backup.make_target(cfg, secrets)
 
-        ok = do_backfill(ctx, target, args.site) if args.cmd == "backfill" else do_nightly(ctx, target)
+        if args.cmd == "backfill":
+            ok = do_backfill(ctx, target, args.site)
+        elif args.cmd == "weekly":
+            ok = do_weekly(ctx, target)
+        else:
+            ok = do_nightly(ctx, target)
         health.finish_job(ctx, ok)
         return EXIT_OK if ok else EXIT_STEP_FAILED
     except SkError as e:

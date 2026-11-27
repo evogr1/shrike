@@ -1,0 +1,9 @@
+// Lets the shrike user start only its three job units (used by POST /v1/jobs).
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" && subject.user == "shrike" &&
+        action.lookup("verb") == "start" &&
+        ["shrike-nightly.service", "shrike-weekly.service", "shrike-backfill.service"]
+            .indexOf(action.lookup("unit")) >= 0) {
+        return polkit.Result.YES;
+    }
+});

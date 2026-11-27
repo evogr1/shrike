@@ -1436,3 +1436,8 @@ Written fresh against Trello REST API v1. It doesn't copy Kestrel, whose Trello 
 --------------------------------------------------------------------------------
 
 *Drafted with EGM*
+
+## Changes made while building Phase 1
+
+- When a site has fewer than `min_band_pairs` queries in a position band, expected CTR comes from `fallback_ctr` in the config, and the card says "a generic benchmark". C5 did not cover this case; without it, low-traffic sites get no opportunities.
+- `GET /v1/setup` returns the last saved setup report without extra live checks.

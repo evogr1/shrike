@@ -1,0 +1,23 @@
+[Unit]
+Description=Shrike HTTP API and MCP (read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/shrike/venv/bin/shrike-server
+User=shrike
+Group=shrike
+EnvironmentFile=/etc/shrike/env
+Environment=SHRIKE_ENV_FILE=/etc/shrike/env
+Environment=SHRIKE_CONFIG=/etc/shrike/config.toml
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ReadWritePaths=/var/lib/shrike
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

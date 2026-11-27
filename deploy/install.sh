@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Shrike installer (Phase 0). Idempotent: run it, fill in the env file and config, run it again.
-# Usage: sudo /opt/shrike/deploy/install.sh
+# Shrike installer. Idempotent: run it, fill in the env file and config, run it again.
+# Usage: sudo /opt/shrike/deploy/install.sh [--phase 0|1]
 set -euo pipefail
+
+PHASE=0
+if [ "${1:-}" = "--phase" ]; then PHASE="${2:?--phase needs 0 or 1}"; fi
 
 REPO=/opt/shrike
 ETC=/etc/shrike
@@ -38,6 +41,15 @@ fi
 for u in shrike-nightly.service shrike-backfill.service shrike-setup.service shrike-alert@.service; do
   install -o root -g root -m 644 "$REPO/deploy/systemd/$u" "$UNITS/$u"
 done
+
+if [ "$PHASE" = "1" ]; then
+  install -o root -g root -m 644 "$REPO/deploy/systemd/shrike-weekly.service" "$UNITS/"
+  install -o root -g root -m 644 "$REPO/deploy/systemd/shrike-server.service" "$UNITS/"
+  install -d -m 755 /etc/polkit-1/rules.d
+  install -o root -g root -m 644 "$REPO/deploy/polkit/50-shrike.rules" /etc/polkit-1/rules.d/
+  grep -Eq '^phase = 1' "$ETC/config.toml" || { echo "set general.phase = 1 in $ETC/config.toml, then run again"; exit 1; }
+  grep -Eq '^SHRIKE_API_KEY=.{24,}' "$ETC/env" || { echo "add SHRIKE_API_KEY (openssl rand -hex 24) to $ETC/env, then run again"; exit 1; }
+fi
 
 # 5. stop here until secrets are filled in
 if ! grep -q '^SHRIKE_TRELLO_TOKEN=.\+' "$ETC/env"; then
@@ -81,4 +93,10 @@ fi
 
 # 9. nightly timer (nights that start during the backfill exit 3 and still ping)
 systemctl enable --now shrike-nightly.timer
+if [ "$PHASE" = "1" ]; then
+  systemctl enable --now shrike-weekly.timer
+  systemctl enable shrike-server.service
+  systemctl restart shrike-server.service
+  echo "Phase 1 on: weekly brief timer and API server"
+fi
 echo "done. Nightly timer enabled: systemctl list-timers shrike-nightly.timer"
